@@ -1,0 +1,32 @@
+# --- Build Artifacts ---
+Debug/
+Release/
+bin/
+obj/
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+
+# --- IDE/Editor Specific ---
+.settings/
+.metadata/
+*.launch
+*.uvguix.*
+*.uvoptx
+.project
+.cproject
+.mxproject
+
+# --- STM32CubeMX / CubeIDE ---
+# Keep the .ioc file! It is essential for regenerating code.
+# The following are often local or transient:
+/STM32CubeIDE/
+/*.pcode
+
+# --- System & Misc ---
+.DS_Store
+Thumbs.db
+*.swp
+*~

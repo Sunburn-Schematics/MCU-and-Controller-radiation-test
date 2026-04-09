@@ -1,0 +1,10 @@
+# Ignoring files according to: https://developerhelp.microchip.com/xwiki/bin/view/software-tools/ides/x/version-control/working-with-version-control/
+#  and https://forum.microchip.com/s/topic/a5C3l000000MPTyEAO/t328014
+.generated_files
+build
+debug
+dist
+motorbench		# Suggested by other user... 
+nbproject/Makefile-*
+nbproject/Package-*
+nbproject/private
