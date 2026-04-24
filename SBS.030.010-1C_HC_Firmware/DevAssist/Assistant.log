@@ -25,3 +25,9 @@
 **DevAssist - 2026-04-24 12:13:40**
 - Identified regex bug in setup_usbipd.ps1 (string mismatch on 'STLink').
 - Patched script to match VID:PID and case-insensitive names, committed fix to GitHub.
+
+**DevAssist - 2026-04-24 17:00:10**
+- Successfully configured USART1 (115200 baud) on PA9/PA10.
+- Retargeted printf to USART1 using __io_putchar.
+- Transmitted 'BOOTING...' sequence over TCP Serial Bridge.
+- Confirmed dual-monitoring works perfectly with the host user.
