@@ -1,0 +1,18 @@
+### Assistant Log
+
+**A0_Assistant - 2026-04-24 11:36:28**
+- Initialized development environment for the SBS.030.010-1C_HC_Firmware project.
+- Configured Windows ARM GCC toolchain and OpenOCD via Winget.
+- Set up a reproducible Docker Dev Container with `usbipd-win` for ST-Link passthrough.
+- Diagnosed instant Hard Faults on the board. Discovered silicon mismatch (STM32F401 installed instead of STM32F411) by reading `DBGMCU_IDCODE` over SWD.
+- Regenerated STM32CubeMX files for STM32F401, recompiled, and successfully flashed bare-metal blink logic.
+- Documented Standard Operating Procedures (SOP) and utility Python scripts in `AgentInstructions` folder.
+- Pushed `.devcontainer`, `.vscode`, and `AgentInstructions` infrastructure to GitHub repository.
+
+**DevAssist - 2026-04-24 11:49:27**
+- Persona updated to DevAssist per user instruction.
+- Ready to review the Product Requirements Document (PRD) and begin Test Host Controller feature implementation.
+
+**DevAssist - 2026-04-24 11:54:45**
+- Renamed 'AgentInstructions' folder to 'DevAssist'.
+- Relocated Assistant.log into the DevAssist folder for consolidated reference and tracking within the GitHub repository.
