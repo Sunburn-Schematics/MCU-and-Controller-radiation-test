@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Cortex Debug",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/build/SBS.030.010-1C_HC_Firmware.elf",
+      "request": "launch",
+      "type": "cortex-debug",
+      "runToEntryPoint": "main",
+      "servertype": "openocd",
+      "configFiles": [
+        "interface/stlink.cfg",
+        "target/stm32f4x.cfg"
+      ],
+      "preLaunchTask": "build",
+      "gdbPath": "gdb-multiarch",
+      "objdumpPath": "arm-none-eabi-objdump",
+      "nmPath": "arm-none-eabi-nm"
+    }
+  ]
+}

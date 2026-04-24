@@ -1,0 +1,23 @@
+{
+  "name": "STM32 FW Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": ["--privileged"],
+  "customizations": {
+    "vscode": {
+      "settings": {},
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.makefile-tools",
+        "marus25.cortex-debug",
+        "dan-c-underwood.arm",
+        "ms-vscode.hexeditor",
+        "cschlosser.doxdocgen",
+        "usernamehw.errorlens",
+        "eamodio.gitlens"
+      ]
+    }
+  },
+  "remoteUser": "root"
+}
