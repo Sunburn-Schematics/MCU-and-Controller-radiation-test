@@ -31,3 +31,8 @@
 - Retargeted printf to USART1 using __io_putchar.
 - Transmitted 'BOOTING...' sequence over TCP Serial Bridge.
 - Confirmed dual-monitoring works perfectly with the host user.
+
+**DevAssist - 2026-04-24 17:33:20**
+- Implemented DrMarty/STM32Utils UartIO circular buffer (256 bytes) via DMA and Interrupts.
+- Tested burst echo via TCPSerialBridge successfully.
+- Code committed: Makefile, main.c, UartIO.c, UartIO.h.
