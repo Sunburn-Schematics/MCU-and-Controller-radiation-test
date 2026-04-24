@@ -16,3 +16,12 @@
 **DevAssist - 2026-04-24 11:54:45**
 - Renamed 'AgentInstructions' folder to 'DevAssist'.
 - Relocated Assistant.log into the DevAssist folder for consolidated reference and tracking within the GitHub repository.
+
+**DevAssist - 2026-04-24 12:10:02**
+- Executed automated startup environment checklist.
+- Verified Host Workspace, Docker Dev Container, GCC Toolchain, and GNU Make.
+- Detected ST-Link passthrough failure (usbipd attach required). Pending user action.
+
+**DevAssist - 2026-04-24 12:13:40**
+- Identified regex bug in setup_usbipd.ps1 (string mismatch on 'STLink').
+- Patched script to match VID:PID and case-insensitive names, committed fix to GitHub.

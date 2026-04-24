@@ -13,7 +13,7 @@ Write-Host "Locating ST-Link..."
 $listOutput = usbipd list
 Write-Host $listOutput
 
-$match = $listOutput | Select-String -Pattern "^\s*([0-9]+-[0-9]+)\s+.*(?:ST-Link|STMicroelectronics)"
+$match = $listOutput | Select-String -Pattern "(?i)^\s*([0-9]+-[0-9]+)\s+.*(?:ST-?Link|STMicroelectronics|0483:3748)"
 if ($match) {
     $busid = $match.Matches[0].Groups[1].Value
     Write-Host "Found ST-Link on BUSID: $busid" -ForegroundColor Green
