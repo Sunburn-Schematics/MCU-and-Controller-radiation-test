@@ -27,7 +27,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "UartIO.h"
-#include <stdio.h>
+#include "TimeSinceBoot.h"
+#include "Rfc5424.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,7 +49,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static uint32_t last_tsb_report_ms = 0U;
+static uint8_t g_device_id = 0U;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,7 +64,22 @@ extern void __io_putchar(uint8_t ch);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void FormatTsb(char *out, size_t out_size, uint32_t tsb_ms)
+{
+  uint32_t total_seconds = tsb_ms / 1000U;
+  uint32_t ms = tsb_ms % 1000U;
+  uint32_t days = total_seconds / 86400U;
+  uint32_t hours = (total_seconds % 86400U) / 3600U;
+  uint32_t minutes = (total_seconds % 3600U) / 60U;
+  uint32_t seconds = total_seconds % 60U;
 
+  snprintf(out, out_size, "%08lu %02lu:%02lu:%02lu.%03lu",
+           (unsigned long)days,
+           (unsigned long)hours,
+           (unsigned long)minutes,
+           (unsigned long)seconds,
+           (unsigned long)ms);
+}
 /* USER CODE END 0 */
 
 /**
@@ -102,8 +119,26 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   UartIO_Init(&huart1);
-  printf("BOOTING...\r\n");
-  /* USER CODE END 2 */
+  TSB_Init();
+  char rfc5424_app_name[8];
+  char tsb_text[32];
+  snprintf(rfc5424_app_name, sizeof(rfc5424_app_name), "ID=%02u", (unsigned)(g_device_id & 0x3FU));
+  RFC5424_Init("-", rfc5424_app_name, "-", "BOOT");
+  if (ADC1_StartContinuousDma() != HAL_OK) {
+    Error_Handler();
+  }
+  FormatTsb(tsb_text, sizeof(tsb_text), TSB_GetMs());
+  RFC5424_Logf(SYSLOG_FACILITY_LOCAL0,
+               SYSLOG_SEV_INFO,
+               "BOOT",
+               "%s - ADC[%u,%u,%u,%u,%u,%u]",
+               tsb_text,
+               g_adc1_samples[0],
+               g_adc1_samples[1],
+               g_adc1_samples[2],
+               g_adc1_samples[3],
+               g_adc1_samples[4],
+               g_adc1_samples[5]);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -111,9 +146,27 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    uint32_t tsb_ms = TSB_GetMs();
     int c = __io_getchar();
     if (c != EOF) {
-        __io_putchar(c);
+        __io_putchar((uint8_t)c);
+    }
+
+    if ((tsb_ms - last_tsb_report_ms) >= 1000U) {
+        last_tsb_report_ms = tsb_ms;
+        FormatTsb(tsb_text, sizeof(tsb_text), tsb_ms);
+        RFC5424_Logf(
+            SYSLOG_FACILITY_LOCAL0,
+            SYSLOG_SEV_INFO,
+            "BOOT",
+            "%s - ADC[%u,%u,%u,%u,%u,%u]",
+            tsb_text,
+            g_adc1_samples[0],
+            g_adc1_samples[1],
+            g_adc1_samples[2],
+            g_adc1_samples[3],
+            g_adc1_samples[4],
+            g_adc1_samples[5]);
     }
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
