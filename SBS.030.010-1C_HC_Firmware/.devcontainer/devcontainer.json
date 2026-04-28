@@ -3,7 +3,11 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "runArgs": ["--privileged"],
+  "runArgs": [
+    "--name", "STM32_HC_DevContainer",
+    "--privileged",
+    "-v", "/dev/bus/usb:/dev/bus/usb"
+  ],
   "customizations": {
     "vscode": {
       "settings": {},

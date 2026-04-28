@@ -21,7 +21,8 @@
 #include "adc.h"
 
 /* USER CODE BEGIN 0 */
-
+DMA_HandleTypeDef hdma_adc1;
+volatile uint16_t g_adc1_samples[ADC1_ANALOG_CHANNEL_COUNT] = {0};
 /* USER CODE END 0 */
 
 ADC_HandleTypeDef hadc1;
@@ -136,6 +137,9 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 }
 
 /* USER CODE BEGIN 1 */
-
+HAL_StatusTypeDef ADC1_StartContinuousDma(void)
+{
+  return HAL_ADC_Start_DMA(&hadc1, (uint32_t *)g_adc1_samples, ADC1_ANALOG_CHANNEL_COUNT);
+}
 /* USER CODE END 1 */
 

@@ -16,8 +16,8 @@
 #define TX_MODE_INTERRUPT				
 
 // Set by PRD/DevAssist to 256 bytes
-#define TX_BUFF_SZ	256
-#define RX_BUFF_SZ	256
+#define TX_BUFF_SZ	128
+#define RX_BUFF_SZ	128
 
 void UartIO_Init(UART_HandleTypeDef *huart);
 char UartIO_getch(void);

@@ -35,13 +35,14 @@ extern "C" {
 extern ADC_HandleTypeDef hadc1;
 
 /* USER CODE BEGIN Private defines */
-
+#define ADC1_ANALOG_CHANNEL_COUNT 6U
 /* USER CODE END Private defines */
 
 void MX_ADC1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+extern volatile uint16_t g_adc1_samples[ADC1_ANALOG_CHANNEL_COUNT];
+HAL_StatusTypeDef ADC1_StartContinuousDma(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

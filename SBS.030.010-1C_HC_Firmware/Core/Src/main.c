@@ -29,6 +29,10 @@
 #include "UartIO.h"
 #include "TimeSinceBoot.h"
 #include "Rfc5424.h"
+#include "Stimulus.h"
+#include "terminal.h"
+#include <stdio.h>
+/* USER CODE END Includes */
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,16 +55,16 @@
 /* USER CODE BEGIN PV */
 static uint32_t last_tsb_report_ms = 0U;
 static uint8_t g_device_id = 0U;
+static volatile const char *g_error_context = "reset";
+static volatile uint8_t g_uart1_ready = 0U;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-extern int __io_getchar(void);
-extern void __io_putchar(uint8_t ch);
-
-
-/* USER CODE END PFP */
+static void FormatTsb(char *out, size_t out_size, uint32_t tsb_ms);
+int __io_getchar(void);
+int __io_putchar(int ch);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
@@ -88,9 +92,9 @@ static void FormatTsb(char *out, size_t out_size, uint32_t tsb_ms)
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
-
+  char rfc5424_app_name[8];
+  char tsb_text[32];
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -117,28 +121,78 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_USART1_UART_Init();
+
   /* USER CODE BEGIN 2 */
+  g_uart1_ready = 1U;
   UartIO_Init(&huart1);
-  TSB_Init();
-  char rfc5424_app_name[8];
-  char tsb_text[32];
+    printf("\r\nUART1 Initialized\r\n");
+//  TSB_Init();
+  Terminal_DebugCheckpoint("TSB_Init_done", &g_error_context);
+
+  while (1) {
+    HAL_GPIO_TogglePin(LED_BlackPill_GPIO_Port, LED_BlackPill_Pin);
+    HAL_Delay(500U);
+  }
+
+
+
+
+
   snprintf(rfc5424_app_name, sizeof(rfc5424_app_name), "ID=%02u", (unsigned)(g_device_id & 0x3FU));
   RFC5424_Init("-", rfc5424_app_name, "-", "BOOT");
-  if (ADC1_StartContinuousDma() != HAL_OK) {
+  Terminal_DebugCheckpoint("RFC5424_Init_done", &g_error_context);
+
+  if (ADC1_StartContinuousDma() != HAL_OK)
+  {
+    g_error_context = "ADC1_StartContinuousDma_failed";
     Error_Handler();
   }
+  Terminal_DebugCheckpoint("ADC1_StartContinuousDma_done", &g_error_context);
+
+  if (Stimulus_Init() != HAL_OK)
+  {
+    g_error_context = "Stimulus_Init_failed";
+    Error_Handler();
+  }
+  Terminal_DebugCheckpoint("Stimulus_Init_done", &g_error_context);
+
+  if (Stimulus_SetFrequencyHz(1000U) != HAL_OK)
+  {
+    g_error_context = "Stimulus_SetFrequency_failed";
+    Error_Handler();
+  }
+  Terminal_DebugCheckpoint("Stimulus_SetFrequency_done", &g_error_context);
+
+  if (Stimulus_SetMode(STIMULUS_MODE_OPPOSED) != HAL_OK)
+  {
+    g_error_context = "Stimulus_SetMode_failed";
+    Error_Handler();
+  }
+  Terminal_DebugCheckpoint("Stimulus_SetMode_done", &g_error_context);
+
+  if (Stimulus_Start() != HAL_OK)
+  {
+    g_error_context = "Stimulus_Start_failed";
+    Error_Handler();
+  }
+  Terminal_DebugCheckpoint("Stimulus_Start_done", &g_error_context);
+
   FormatTsb(tsb_text, sizeof(tsb_text), TSB_GetMs());
   RFC5424_Logf(SYSLOG_FACILITY_LOCAL0,
                SYSLOG_SEV_INFO,
                "BOOT",
-               "%s - ADC[%u,%u,%u,%u,%u,%u]",
+               "%s - BOOTING... SDRA/SDRB stimulus started at %lu Hz mode=%u ADC[%u,%u,%u,%u,%u,%u]",
                tsb_text,
+               (unsigned long)Stimulus_GetFrequencyHz(),
+               (unsigned)Stimulus_GetMode(),
                g_adc1_samples[0],
                g_adc1_samples[1],
                g_adc1_samples[2],
                g_adc1_samples[3],
                g_adc1_samples[4],
                g_adc1_samples[5]);
+  /* USER CODE END 2 */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -148,31 +202,35 @@ int main(void)
     /* USER CODE BEGIN 3 */
     uint32_t tsb_ms = TSB_GetMs();
     int c = __io_getchar();
-    if (c != EOF) {
-        __io_putchar((uint8_t)c);
+
+    if (c != EOF)
+    {
+      __io_putchar((uint8_t)c);
     }
 
-    if ((tsb_ms - last_tsb_report_ms) >= 1000U) {
-        last_tsb_report_ms = tsb_ms;
-        FormatTsb(tsb_text, sizeof(tsb_text), tsb_ms);
-        RFC5424_Logf(
-            SYSLOG_FACILITY_LOCAL0,
-            SYSLOG_SEV_INFO,
-            "BOOT",
-            "%s - ADC[%u,%u,%u,%u,%u,%u]",
-            tsb_text,
-            g_adc1_samples[0],
-            g_adc1_samples[1],
-            g_adc1_samples[2],
-            g_adc1_samples[3],
-            g_adc1_samples[4],
-            g_adc1_samples[5]);
+    if ((tsb_ms - last_tsb_report_ms) >= 1000U)
+    {
+      last_tsb_report_ms = tsb_ms;
+      FormatTsb(tsb_text, sizeof(tsb_text), tsb_ms);
+      RFC5424_Logf(SYSLOG_FACILITY_LOCAL0,
+                   SYSLOG_SEV_INFO,
+                   "BOOT",
+                   "%s - STIM f=%luHz mode=%u ADC[%u,%u,%u,%u,%u,%u]",
+                   tsb_text,
+                   (unsigned long)Stimulus_GetFrequencyHz(),
+                   (unsigned)Stimulus_GetMode(),
+                   g_adc1_samples[0],
+                   g_adc1_samples[1],
+                   g_adc1_samples[2],
+                   g_adc1_samples[3],
+                   g_adc1_samples[4],
+                   g_adc1_samples[5]);
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
     }
 
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-    HAL_Delay(500);
+    HAL_Delay(100);
+    /* USER CODE END 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -184,29 +242,24 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
-  */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 16;
   RCC_OscInitStruct.PLL.PLLN = 336;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
   RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
+    g_error_context = "HAL_RCC_OscConfig_failed";
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
@@ -216,6 +269,7 @@ void SystemClock_Config(void)
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
+    g_error_context = "HAL_RCC_ClockConfig_failed";
     Error_Handler();
   }
 }
@@ -231,13 +285,26 @@ void SystemClock_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+  if (g_uart1_ready != 0U)
+  {
+    Terminal_ErrorWrite("\r\nERROR_HANDLER:");
+    Terminal_ErrorWriteVolatile(g_error_context);
+    Terminal_ErrorWrite("\r\n");
+  }
+
   while (1)
   {
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    if (g_uart1_ready != 0U)
+    {
+      Terminal_ErrorWrite("ERROR_HANDLER:alive\r\n");
+    }
+    HAL_Delay(250U);
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number

@@ -16,7 +16,8 @@
       "preLaunchTask": "build",
       "gdbPath": "gdb-multiarch",
       "objdumpPath": "arm-none-eabi-objdump",
-      "nmPath": "arm-none-eabi-nm"
+      "nmPath": "arm-none-eabi-nm",
+      "showDevDebugOutput": "raw"
     }
   ]
 }

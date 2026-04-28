@@ -27,6 +27,7 @@
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+DMA_HandleTypeDef hdma_tim4_ch3;
 
 /* TIM2 init function */
 void MX_TIM2_Init(void)
@@ -162,6 +163,11 @@ void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
+  sConfigIC.ICSelection = TIM_ICSELECTION_INDIRECTTI;
+  if (HAL_TIM_IC_ConfigChannel(&htim4, &sConfigIC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN TIM4_Init 2 */
 
   /* USER CODE END TIM4_Init 2 */
@@ -224,6 +230,25 @@ void HAL_TIM_IC_MspInit(TIM_HandleTypeDef* tim_icHandle)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF2_TIM4;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    /* TIM4 DMA Init */
+    /* TIM4_CH3 Init */
+    hdma_tim4_ch3.Instance = DMA1_Stream7;
+    hdma_tim4_ch3.Init.Channel = DMA_CHANNEL_2;
+    hdma_tim4_ch3.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_tim4_ch3.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_tim4_ch3.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_tim4_ch3.Init.PeriphDataAlignment = DMA_PDATAALIGN_HALFWORD;
+    hdma_tim4_ch3.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
+    hdma_tim4_ch3.Init.Mode = DMA_NORMAL;
+    hdma_tim4_ch3.Init.Priority = DMA_PRIORITY_LOW;
+    hdma_tim4_ch3.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
+    if (HAL_DMA_Init(&hdma_tim4_ch3) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    __HAL_LINKDMA(tim_icHandle,hdma[TIM_DMA_ID_CC3],hdma_tim4_ch3);
 
   /* USER CODE BEGIN TIM4_MspInit 1 */
 
@@ -309,6 +334,8 @@ void HAL_TIM_IC_MspDeInit(TIM_HandleTypeDef* tim_icHandle)
     */
     HAL_GPIO_DeInit(GPIOB, LTC3901_ME_Timer_Pin|LTC3901_MF_Timer_Pin|LT8316_Gate_Timer_Pin);
 
+    /* TIM4 DMA DeInit */
+    HAL_DMA_DeInit(tim_icHandle->hdma[TIM_DMA_ID_CC3]);
   /* USER CODE BEGIN TIM4_MspDeInit 1 */
 
   /* USER CODE END TIM4_MspDeInit 1 */
