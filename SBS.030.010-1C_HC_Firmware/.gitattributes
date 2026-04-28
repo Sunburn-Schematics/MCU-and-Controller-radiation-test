@@ -1,0 +1,7 @@
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.c text eol=lf
+*.h text eol=lf
+*.ld text eol=lf
+*.mk text eol=lf
+Makefile text eol=lf

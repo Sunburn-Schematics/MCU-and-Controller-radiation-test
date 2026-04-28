@@ -3,6 +3,7 @@ set -euo pipefail
 
 OPENOCD_LOG=/tmp/devassist_openocd.log
 GDB_LOG=/tmp/devassist_gdb.log
+READINESS_HELPER="DevAssist/Utils/openocd_readiness_probe.sh"
 ELF="${1:-build/SBS.030.010-1C_HC_Firmware.elf}"
 
 GDB_BIN=""
@@ -21,13 +22,22 @@ cleanup() {
   if [[ -n "${OPENOCD_PID:-}" ]]; then
     kill "$OPENOCD_PID" >/dev/null 2>&1 || true
   fi
-  pkill -f openocd >/dev/null 2>&1 || true
+  pkill -x openocd >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-
-pkill -f openocd >/dev/null 2>&1 || true
+pkill -x openocd >/dev/null 2>&1 || true
 rm -f "$OPENOCD_LOG" "$GDB_LOG"
 
+TMP_READINESS_HELPER=/tmp/devassist_openocd_readiness_probe.sh
+tr -d '\r' < "$READINESS_HELPER" > "$TMP_READINESS_HELPER"
+chmod +x "$TMP_READINESS_HELPER"
+
+if ! bash "$TMP_READINESS_HELPER" "$OPENOCD_LOG" >/tmp/devassist_readiness_stdout.log 2>&1; then
+  echo "ERROR: OpenOCD readiness probe failed"
+  echo "__DEVASSIST_OPENOCD_LOG__"
+  cat /tmp/devassist_readiness_stdout.log || true
+  exit 1
+fi
 openocd -f interface/stlink.cfg -f target/stm32f4x.cfg >"$OPENOCD_LOG" 2>&1 &
 OPENOCD_PID=$!
 
@@ -50,15 +60,6 @@ if ! grep -q "Listening on port 3333" "$OPENOCD_LOG" 2>/dev/null; then
   cat "$OPENOCD_LOG" || true
   exit 1
 fi
-
-for marker in "VID:PID 0483:3748" "Target voltage:" "starting gdb server"; do
-  if ! grep -q "$marker" "$OPENOCD_LOG" 2>/dev/null; then
-    echo "ERROR: OpenOCD readiness probe missing marker: $marker"
-    echo "__DEVASSIST_OPENOCD_LOG__"
-    cat "$OPENOCD_LOG" || true
-    exit 1
-  fi
-done
 
 "$GDB_BIN" -batch "$ELF" \
   -ex "target extended-remote :3333" \

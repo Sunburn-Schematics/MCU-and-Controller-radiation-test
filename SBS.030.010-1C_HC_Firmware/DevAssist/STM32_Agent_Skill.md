@@ -1,30 +1,59 @@
 # STM32 Development & Debugging Skill
 
 ## 🧠 Session Reflection
-### What Worked:
-- **Containerized Environments:** Using `.devcontainer` with ARM GCC and OpenOCD guarantees environment replication. `usbipd-win` bridges the WSL gap beautifully.
-- **Bare-Metal Diagnostics:** Using `openocd` to write directly to registers (`mdw`, `mww`) is the ultimate hardware sanity check, completely bypassing buggy HAL code.
-- **Low-Level Sleuthing:** Querying `DBGMCU_IDCODE` (0xE0042000) directly over SWD to discover the silicon was an F401 instead of an F411 solved the core Hard Fault mystery.
-- **GDB Backtracing:** Pulling the PC and MSP from the CPU crash state identified the `__libc_init_array` null-pointer trap caused by missing standard libraries.
+### What Worked
+- **Containerized environments:** Using `.devcontainer` with ARM GCC and OpenOCD provides a reproducible team workflow.
+- **Host-owned USB attach:** The ST-Link path is only reliable after the user runs `DevAssist\setup_usbipd.ps1` with elevated privileges on the Windows host.
+- **Readiness-gated flashing:** A flash attempt should only proceed after OpenOCD proves it can open the ST-Link and start the GDB server from the same execution path used for automation.
+- **Strict proof of success:** Treat flashing as successful only when explicit markers such as `FLASH_OK`, section loading messages, transfer rate, and start address are present.
+- **Low-level diagnostics:** OpenOCD direct register access and silicon-ID reads remain the fastest way to separate hardware problems from firmware/configuration problems.
 
-### What Didn't Work (Pitfalls to Avoid):
-- **Assuming Silicon Identity:** Generating code before physically verifying the chip variant led to mismatched clock trees (100MHz vs 84MHz) and immediate Hard Faults.
-- **Regex Blind Replacements:** Injecting C code via regex without strictly managing curly braces `}` broke the AST and corrupted compilation.
-- **Hardcoded Workspace Paths:** Dockers mount points (`/workspaces/...`) vary. Hardcoding them leads to "No Makefile found" errors.
-- **Missing Toolchain Configs:** Forgetting `libnewlib-arm-none-eabi` in the initial Docker image caused bootloader crashes.
+### Pitfalls to Avoid
+- **Assuming silicon identity:** Always verify the actual MCU before trusting the `.ioc` target.
+- **Assuming USB attach is enough:** `usbipd` showing `Attached` is necessary but not sufficient; OpenOCD must still prove end-to-end readiness.
+- **Assuming a fresh session already has OpenOCD running:** Always kill stale instances and start a fresh probe for the current workflow.
+- **Using overly broad kill patterns:** Do not use `pkill -f openocd` in helper scripts because it can kill the helper itself if the filename contains `openocd`; use `pkill -x openocd` instead.
+- **Ignoring Windows line endings on mounted shell scripts:** Shell helpers in the Windows-mounted workspace may appear as CRLF inside the container. Normalize them to `/tmp` before execution or otherwise enforce LF handling.
+- **Hardcoded workspace assumptions:** Detect active container/workspace paths dynamically where possible.
 
 ---
 
 ## 🛠️ Agent Standard Operating Procedure (SOP)
 
-### 1. Verify Silicon Before Coding
-**Never trust the project `.ioc` blindly.** Always run `check_silicon_id.py` to read the hardware ID directly from the chip via OpenOCD. Match it against the STM32 Reference Manual.
+### 1. Verify the host USB prerequisite first
+Before any hardware-facing preflight, debug, or flash operation:
+- confirm the user has run `DevAssist\setup_usbipd.ps1` on the Windows host with the required elevated privileges
+- verify the ST-Link is attached via `usbipd list`
 
-### 2. Resilient Compilation
-Use dynamically located workspace paths. Run `build_and_flash.py` to automatically detect the Makefile, compile `-j4`, and flash the `.elf` via the active Docker container.
+If this prerequisite is not satisfied, stop and ask the user to run the setup script before proceeding.
 
-### 3. Hardware-First Debugging
-If the CPU hits a Hard Fault, do not assume the software logic is wrong. Run `direct_hardware_toggle.py` to bypass the entire stack via raw SWD register writes. If the LED blinks via Direct Memory Access, the hardware is fine; the bug is in the HAL or clock configurations.
+### 2. Verify silicon before trusting generated project settings
+Use the silicon-ID tooling or direct OpenOCD reads to confirm the actual MCU variant on the board. Do this before assuming the CubeMX project, clocks, memory sizes, or peripheral setup are valid.
 
-### 4. Safe Code Injection
-When modifying `.c` files, locate the STM32Cube `/* USER CODE BEGIN X */` blocks. Use robust string manipulation to preserve boundaries and trailing brackets. Always run a clean `make` to catch syntax faults immediately.
+### 3. Use readiness-gated preflight
+The preferred host preflight entrypoint is:
+- `DevAssist\DevEnv_PreFlight.ps1`
+
+A valid hardware-ready preflight requires OpenOCD proof markers from the actual automation path, not just Docker/container visibility.
+
+### 4. Use readiness-gated flash workflow
+Use the standardized flash workflow (`DevAssist\build_and_flash.ps1` or `DevAssist\Utils\flash_gdb.sh`) and require explicit success evidence. Never claim the device was flashed unless the logs clearly contain proof markers such as:
+- `FLASH_OK`
+- `Loading section .isr_vector`
+- `Transfer rate:`
+- `Start address 0x...`
+
+### 5. Normalize shell helpers before execution in the container
+Because Windows-mounted `.sh` files may present with CRLF inside the container, execute normalized copies from `/tmp` when needed. This applies especially to:
+- `DevAssist/Utils/flash_gdb.sh`
+- `DevAssist/Utils/openocd_readiness_probe.sh`
+
+### 6. Hardware-first debugging
+If firmware behavior is suspicious, do not assume application logic is the first cause. Use OpenOCD/GDB, direct register access, and minimal hardware tests to prove whether the target is running, halted, misclocked, or incorrectly configured.
+
+### 7. Safe firmware editing
+When modifying CubeMX-managed sources:
+- prefer `/* USER CODE BEGIN ... */` regions
+- avoid brittle regex edits
+- rebuild immediately after each change
+- keep project documentation and support tooling aligned with the actual workflow
