@@ -1,0 +1,12 @@
+build/
+cmake-build-*/
+mx.scratch/
+.vscode/
+!.settings/
+*.o
+*.obj
+*.elf
+*.hex
+*.bin
+*.map
+*.list
