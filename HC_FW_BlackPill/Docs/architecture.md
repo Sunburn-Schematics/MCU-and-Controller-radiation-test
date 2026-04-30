@@ -35,9 +35,9 @@ The firmware currently uses a simple superloop:
 
 ## Current placeholder behavior
 
-The application toggles the blue LED every 500 ms.
+The application currently toggles the blue LED through the BSP heartbeat path.
 
-This preserves the current observable behavior while moving it out of `main.c`.
+This preserves simple observable behavior while validating the first custom software layer.
 
 ## Coding rules
 
@@ -48,10 +48,217 @@ This preserves the current observable behavior while moving it out of `main.c`.
 - Keep board and pin ownership in `Bsp/`.
 - Prefer explicit APIs over sharing peripheral handles broadly.
 
+## BSP design rules
+
+The BSP layer exists to answer one question:
+
+**How does this firmware talk to this specific board safely and clearly?**
+
+The BSP layer owns only simple, board-specific controls and reads that should be named by board function rather than by raw port/pin.
+
+### BSP owns
+
+- board LEDs
+- board power-enable signals
+- BeamOn digital input read
+- 6-bit board ID read
+- deterministic safe-state output control
+- board-level polarity handling
+
+### BSP does not own
+
+- ADC acquisition logic
+- timer input-capture logic
+- waveform generation logic
+- logging policy
+- fault policy
+- protocol behavior
+- state-machine behavior
+- telemetry formatting
+
+### BSP partitioning principles
+
+- Use product-facing names, not raw GPIO names, in public APIs.
+- Hide active-high vs active-low behavior inside BSP.
+- Do not expose raw GPIO port/pin ownership upward unless there is a strong reason.
+- Keep BSP synchronous and simple.
+- Do not place application policy in BSP.
+- Do not let App or Services manipulate board-owned GPIO directly when BSP already owns it.
+- CubeMX/HAL configures hardware; BSP applies board policy and named access.
+
+### Consolidated BSP module direction
+
+The current BSP direction is a single consolidated board module:
+
+- `Bsp/bsp_board.h`
+- `Bsp/bsp_board.c`
+
+This module should own:
+
+- LED control
+- power-enable control with normalized polarity
+- BeamOn read
+- board ID read
+- board safe-state handling
+
+The current public API style is:
+
+- `bsp_init()`
+- `bsp_enter_safe_state()`
+- `bsp_get_id_raw()`
+- `bsp_is_beam_on()`
+- `bsp_get_status()`
+- `bsp_led_*()`
+- `bsp_power_*()`
+
+### BSP safe-state rule
+
+BSP must provide a deterministic hardware-safe output state that can be applied at startup and reused later by higher-level fault handling.
+
+Current intended safe-state behavior is:
+
+- LT8316 power disabled
+- LTC3901 power disabled
+- blue LED off
+- red LED off
+- green LED off
+
+Higher layers may later assert indicators or change power state intentionally, but the safe-state baseline is owned by BSP.
+
+## Drivers_Local design rules
+
+The `Drivers_Local` layer owns STM32/HAL-based peripheral behavior that is specific to this product but is still below Services and App.
+
+This layer should encapsulate peripheral-function behavior using product-level concepts rather than exposing raw STM32 instance details upward.
+
+### Drivers_Local owns
+
+- ADC sensing and channel grouping
+- timer input-capture measurement
+- synchronized SDRA/SDRB waveform generation
+- product-specific transport wrappers when needed for UART or USB CDC
+- local hardware conversions tightly coupled to this design
+
+### Drivers_Local does not own
+
+- fault latching/clearing policy
+- event logging policy
+- CLI command parsing
+- application state transitions
+- operator-facing reporting behavior
+
+### Drivers_Local partitioning principles
+
+- Name drivers by product function, not by STM32 peripheral instance.
+- Hide HAL handles and timer/ADC channel details from upper layers.
+- Return normalized values such as raw counts, timing values, frequency, pulse width, or enable state.
+- Do not embed application decisions in drivers.
+- A driver may report invalid data, timeout, or missing signal; it should not decide that a fault must latch or that the board must enter safe state.
+- Keep the public API stable even if the STM32 peripheral instance changes later.
+
+### Recommended Drivers_Local modules
+
+The preferred initial `Drivers_Local` partition is:
+
+- `Drivers_Local/adc_sense_drv.*`
+- `Drivers_Local/pwm_capture_drv.*`
+- `Drivers_Local/sync_drv.*`
+
+Optional transport wrappers may be added later if needed:
+
+- `Drivers_Local/debug_uart_drv.*`
+- `Drivers_Local/usb_cdc_drv.*`
+
+### Drivers_Local module intent
+
+#### `adc_sense_drv.*`
+Owns analog acquisition for:
+
+- `VUpstream_Anlg`
+- `LTC3901_Vcc_Anlg`
+- `LT8316_Vout_Anlg`
+- `LTC3901_ME_Anlg`
+- `LTC3901_MF_Anlg`
+- `LT8316_Gate_Anlg`
+- `VTemp`
+- `VRefInt`
+
+Responsibilities:
+
+- trigger or retrieve ADC conversions
+- provide stable channel enumeration
+- return raw counts and later fixed electrical conversions where appropriate
+
+#### `pwm_capture_drv.*`
+Owns timer-based measurement for:
+
+- `LTC3901_ME_Tmr`
+- `LTC3901_MF_Tmr`
+- `LT8316_Gate_Tmr`
+
+Responsibilities:
+
+- frequency measurement
+- pulse-width measurement
+- duty-cycle derivation
+- hiding timer channel and capture math details
+
+#### `sync_drv.*`
+Owns synchronized output generation for:
+
+- `SDRA`
+- `SDRB`
+
+Responsibilities:
+
+- validate synchronized square-wave generation requests
+- generate a 50% duty-cycle SDRA waveform at the requested base frequency
+- generate a 50% duty-cycle SDRB waveform delayed relative to SDRA
+- convert requested frequency and delay values into timer realization
+- enable and disable the synchronized outputs
+- hide timer output implementation details from upper layers
+
+Public API model:
+
+- one shared `frequency_hz`
+- one `sdrb_delay_ns` relative to SDRA
+
+Design rules:
+
+- SDRA is the reference waveform.
+- SDRB uses the same base frequency and 50% duty cycle as SDRA.
+- SDRB timing is defined only by its delay relative to SDRA.
+- Invalid or unrealizable requests must be rejected by the driver.
+
+## Layer boundary examples
+
+### Belongs in BSP
+
+- turn red LED on
+- disable LT8316 power
+- read BeamOn input
+- read packed board ID
+
+### Belongs in Drivers_Local
+
+- sample all ADC channels
+- convert a capture register set into frequency and duty-cycle data
+- configure the SDRA base frequency and SDRB delay
+- enable or disable synchronized waveform generation
+
+### Does not belong in BSP or Drivers_Local
+
+- decide whether a measured voltage is a latched fault
+- decide whether BeamOn should inhibit a restart sequence
+- format a status line for CLI or USB reporting
+- coordinate application state transitions
+
 ## Planned next modules
 
-- `Bsp/bsp_board.*`
-- `Services/log.*`
-- `Services/cli.*`
-- `Services/fault_manager.*`
-- `App/app_state_machine.*`
+Near-term architecture direction is:
+
+- keep `Bsp/bsp_board.*` as the consolidated board abstraction
+- build `Drivers_Local/adc_sense_drv.*`
+- add `Drivers_Local/pwm_capture_drv.*`
+- add `Drivers_Local/sync_drv.*`
+- add Services only after the local hardware driver contracts are stable enough to support logging, CLI, telemetry, and fault management

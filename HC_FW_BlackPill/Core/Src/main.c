@@ -20,14 +20,11 @@
 #include "main.h"
 #include "adc.h"
 #include "dma.h"
-#include "stm32f4xx_hal.h"
-#include "stm32f4xx_hal_gpio.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
 
-/* Private includes ----------------------------------------------------------*/
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "fw_app.h"
@@ -104,6 +101,42 @@ int main(void)
   MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
   fw_app_init();
+
+  #include "sync_drv.h"
+//Create a 1kHz square wave on SDRA.
+/*  sync_drv_config_t sync_cfg = {
+      .frequency_hz = 100000U,
+      .sdrb_delay_ns = 50000U, // 180 degree phase shift
+  };  */
+  sync_drv_init();
+  sync_drv_raw_config_t raw_cfg = {
+/*    .ARR = 839U, // 84MHz / (2 * (839 + 1)) = 100kHz square wave
+    .CCR2 = 419U, // */
+    .ARR = 167U, // 84MHz / (2 * (167 + 1)) = 250kHz square wave
+    .CCR2 = 83U, // */
+  };
+ sync_drv_configure_and_enable(&raw_cfg);
+//  sync_drv_enable();
+
+//  sync_drv_configure_and_enable(&sync_cfg);
+
+//  HAL_TIM_OC_Start(&htim3, TIM_CHANNEL_1);
+//  HAL_TIM_OC_MspInit(&htim3);
+
+/* Test Code toggles SDRA pin (but only when it's been configured as GPIO)
+  static uint32_t s_last_toggle_ms;
+  while (1) {
+    uint32_t now_ms = HAL_GetTick();
+
+    if ((now_ms - s_last_toggle_ms) >= 1U)
+    {
+        s_last_toggle_ms = now_ms;
+        HAL_GPIO_TogglePin(SDRA_DRV_GPIO_Port, SDRA_DRV_Pin);
+    }
+  } // */
+
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

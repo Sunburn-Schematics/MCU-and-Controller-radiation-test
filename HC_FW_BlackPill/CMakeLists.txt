@@ -45,6 +45,8 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/fw_app.c
+    Bsp/bsp_board.c
+    Drivers_Local/sync_drv.c
 )
 
 # Add include paths
