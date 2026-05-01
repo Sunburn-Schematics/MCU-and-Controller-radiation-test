@@ -22,6 +22,8 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "usb_vcp_drv.h"
+
 
 /* USER CODE END INCLUDE */
 
@@ -88,7 +90,8 @@
 /* Create buffer for reception and transmission           */
 /* It's up to user to redefine and/or remove those define */
 /** Received data over USB are stored in this buffer      */
-uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
+//uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
+uint8_t UserRxBufferFS[MAX_USB_PACKET_SIZE];    // Use a smaller buffer for USB reception to allow the VCP driver to manage its own larger buffer and avoid overflow issues. The VCP driver will copy data from this buffer to its own buffer as needed.
 
 /** Data to send over USB CDC are stored in this buffer   */
 uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
@@ -261,6 +264,7 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
+  usb_vcp_buffer_rx_pkt(Buf, *Len); // Pass the received USB packet to the VCP driver for processing. The VCP driver will manage copying this data to its own buffer and handling it as needed.
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);

@@ -20,6 +20,7 @@
 #include "main.h"
 #include "adc.h"
 #include "dma.h"
+#include "stm32f4xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
@@ -28,6 +29,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "fw_app.h"
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -102,20 +104,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
   fw_app_init();
 
-  #include "sync_drv.h"
-//Create a 1kHz square wave on SDRA.
-/*  sync_drv_config_t sync_cfg = {
-      .frequency_hz = 100000U,
-      .sdrb_delay_ns = 50000U, // 180 degree phase shift
-  };  */
-  sync_drv_init();
-  sync_drv_raw_config_t raw_cfg = {
-/*    .ARR = 839U, // 84MHz / (2 * (839 + 1)) = 100kHz square wave
-    .CCR2 = 419U, // */
-    .ARR = 167U, // 84MHz / (2 * (167 + 1)) = 250kHz square wave
-    .CCR2 = 83U, // */
-  };
- sync_drv_configure_and_enable(&raw_cfg);
 //  sync_drv_enable();
 
 //  sync_drv_configure_and_enable(&sync_cfg);

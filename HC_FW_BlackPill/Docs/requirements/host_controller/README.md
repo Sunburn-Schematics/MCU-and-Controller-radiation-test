@@ -13,6 +13,7 @@ This folder contains the preliminary Host Controller requirements and specificat
 - `hc_state_machine_spec_v1.md`
 - `hc_verification_traceability_matrix_v1.md`
 - `hc_story_backlog_v1.md`
+- `hc_jsonl_command_processor_implementation_plan_v1.md`
 - `hc_product_specification_amalgamated_v1.md`
 - `hc_product_specification_review_v1.md`
 

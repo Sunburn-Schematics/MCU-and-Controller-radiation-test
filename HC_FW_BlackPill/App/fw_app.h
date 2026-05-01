@@ -5,6 +5,9 @@
 extern "C" {
 #endif
 
+#include "usb_vcp_drv.h"
+
+
 void fw_app_init(void);
 void fw_app_run(void);
 

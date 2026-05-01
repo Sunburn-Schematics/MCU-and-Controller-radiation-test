@@ -52,6 +52,8 @@
 #define APP_RX_DATA_SIZE  1024
 #define APP_TX_DATA_SIZE  1024
 /* USER CODE BEGIN EXPORTED_DEFINES */
+#define MAX_USB_PACKET_SIZE 64U    // Maximum packet size for full-speed USB bulk transfers
+
 
 /* USER CODE END EXPORTED_DEFINES */
 
