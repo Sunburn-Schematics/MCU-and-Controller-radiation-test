@@ -1,5 +1,6 @@
 #include "hc_jsonl_dispatch.h"
 
+#include "hc_datetime.h"
 #include "hc_jsonl_fields.h"
 #include "hc_jsonl_rsp.h"
 
@@ -24,11 +25,10 @@ hc_cmd_status_t hc_jsonl_dispatch_request(const char *line,
         default:
             if (!hc_jsonl_rsp_build_error(rsp_buf,
                                           rsp_buf_size,
-                                          false,
-                                          0u,
+                                          HC_CMD_HOST_CONTROLLER_ID,
                                           request->has_msg,
                                           request->msg,
-                                          "19700101 00:00:00.00",
+                                          hc_datetime_get(),
                                           "NOT_SUPPORTED",
                                           "Packet type not implemented yet"))
             {

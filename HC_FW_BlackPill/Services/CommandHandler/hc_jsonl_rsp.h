@@ -9,16 +9,13 @@ extern "C" {
 
 bool hc_jsonl_rsp_build_set_datetime_ok(char *out,
                                         size_t out_size,
-                                        bool include_hc,
                                         uint32_t hc_id,
-                                        bool include_msg,
                                         uint32_t msg,
                                         const char *ts,
                                         const char *date_time);
 
 bool hc_jsonl_rsp_build_error(char *out,
                               size_t out_size,
-                              bool include_hc,
                               uint32_t hc_id,
                               bool include_msg,
                               uint32_t msg,

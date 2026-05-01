@@ -1,16 +1,17 @@
 #ifndef HC_CMD_TYPES_H_
 #define HC_CMD_TYPES_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 
-#define HC_CMD_MAX_LINE_LEN            (256u)
-#define HC_CMD_MAX_TS_LEN              (24u)
-#define HC_CMD_MAX_DATE_TIME_LEN       (24u)
-#define HC_CMD_MAX_ERROR_CODE_LEN      (24u)
-#define HC_CMD_MAX_ERROR_MESSAGE_LEN   (96u)
-#define HC_CMD_MAX_TOKENS              (48u)
+#define HC_CMD_HOST_CONTROLLER_ID       (1u)
+#define HC_CMD_MAX_LINE_LEN             (256u)
+#define HC_CMD_MAX_TS_LEN               (18u)
+#define HC_CMD_MAX_DATE_TIME_LEN        (18u)
+#define HC_CMD_MAX_ERROR_CODE_LEN       (24u)
+#define HC_CMD_MAX_ERROR_MESSAGE_LEN    (96u)
+#define HC_CMD_MAX_TOKENS               (48u)
 
 typedef enum
 {
@@ -41,12 +42,6 @@ typedef struct
     uint32_t msg;
     bool has_msg;
 } hc_cmd_request_t;
-
-typedef struct
-{
-    char current[HC_CMD_MAX_DATE_TIME_LEN];
-    bool valid;
-} hc_datetime_state_t;
 
 typedef struct
 {

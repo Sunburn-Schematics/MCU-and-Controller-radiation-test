@@ -1,5 +1,28 @@
 # HC JSONL Command Processor Implementation Plan v1
 
+## Current implementation status note
+
+The current CommandHandler vertical slice now supports a working `SET args.date_time` path using `jsmn` tokenization, RTC-backed date/time application, and JSONL `RSP` generation.
+
+The currently implemented request/response shape is:
+
+Request:
+```json
+{"type":"SET","msg":0,"args":{"date_time":"20260501 10:30:00"}}
+```
+
+Response:
+```json
+{"type":"RSP","hc":1,"msg":0,"ts":"20260501 10:30:00","args":{"date_time":"20260501 10:30:00"}}
+```
+
+Current limitations:
+- `SET` is the only implemented TE packet type.
+- only `args.date_time` is currently supported.
+- `GET` and `EXC` currently return `NOT_SUPPORTED`.
+- `hc` is currently emitted using a temporary fixed value of `1` pending integration with the HC identity source.
+- transport integration into USB VCP RX/TX execution flow under `fw_app_run()` is still pending.
+
 ## 1. Purpose
 
 This document maps out a practical firmware implementation structure for the HC JSONL command processor, beginning with the first supported operation:

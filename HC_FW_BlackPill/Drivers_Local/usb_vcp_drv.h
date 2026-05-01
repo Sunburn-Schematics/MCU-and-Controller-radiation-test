@@ -44,7 +44,7 @@ typedef struct
 //    char* vcp_tx_msg_ptr;                // Pointer to the current position in the transmit buffer for ongoing transmissions
 } VCP_HandleTypeDef;
 
-extern VCP_HandleTypeDef hVcp;    // Global instance of the VCP handle
+//extern VCP_HandleTypeDef hVcp;    // Global instance of the VCP handle
 
 
 VCP_StatusTypeDef usb_vcp_drv_init(void);

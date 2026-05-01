@@ -108,11 +108,11 @@ The protocol timestamp field shall be named `ts`.
 
 ### 7.2 Timestamp Format
 The `ts` field shall use the following format:
-- `YYYYMMDD HH:MM:SS.MS`
+- `YYYYMMDD HH:MM:SS`
 
 Example:
 ```json
-{"ts":"20260501 10:14:23.42"}
+{"ts":"20260501 10:14:23"}
 ```
 
 ### 7.3 Timestamp Usage
@@ -275,17 +275,17 @@ Every `RSP` packet shall include:
 
 ### 13.3 Standard Shape
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","args":{"beam_on":true}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","args":{"beam_on":true}}
 ```
 
 ### 13.4 With `msg`
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":102,"args":{"beam_on":true}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":102,"args":{"beam_on":true}}
 ```
 
 ### 13.5 Error Shape
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":102,"error":{"code":"BAD_ARGS","message":"Unknown field: beam_enable"}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":102,"error":{"code":"BAD_ARGS","message":"Unknown field: beam_enable"}}
 ```
 
 ### 13.6 Fields
@@ -321,7 +321,7 @@ Every `STS` packet shall include:
 
 ### 14.3 Preliminary Shape
 ```json
-{"type":"STS","hc":17,"ts":"20260501 10:14:23.42","state":"NORMAL","beam_on":false,"duts":{}}
+{"type":"STS","hc":17,"ts":"20260501 10:14:23","state":"NORMAL","beam_on":false,"duts":{}}
 ```
 
 ### 14.4 Notes
@@ -353,7 +353,7 @@ Every `EVT` packet should include:
 
 ### 15.3 Preliminary Shape
 ```json
-{"type":"EVT","hc":17,"ts":"20260501 10:14:23.42","args":{"event":"FAULT","scope":"LTC3901","id":"HLF-003"}}
+{"type":"EVT","hc":17,"ts":"20260501 10:14:23","args":{"event":"FAULT","scope":"LTC3901","id":"HLF-003"}}
 ```
 
 ### 15.4 Preliminary Rules
@@ -377,7 +377,7 @@ Example:
 
 Example response:
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":201,"args":{"hc_info":{"hc":17,"cmd_sys_ver":"1.0-prelim","fw_ver":"0.1.0"},"beam_on":false}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":201,"args":{"hc_info":{"hc":17,"cmd_sys_ver":"1.0-prelim","fw_ver":"0.1.0"},"beam_on":false}}
 ```
 
 ### 16.2 SET
@@ -392,12 +392,12 @@ Example request:
 
 Example response:
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":202,"args":{"beam_on":true}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":202,"args":{"beam_on":true}}
 ```
 
 If the HC cannot process the request, it may emit:
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":202,"error":{"code":"BAD_STATE","message":"SET not permitted in current HC state"}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":202,"error":{"code":"BAD_STATE","message":"SET not permitted in current HC state"}}
 ```
 
 ---
@@ -476,7 +476,7 @@ To keep initial firmware implementation simple, the following constraints are re
 
 ### 20.2 GET response with HC information
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":1001,"args":{"hc_info":{"hc":17,"cmd_sys_ver":"1.0-prelim","fw_ver":"0.1.0","summary":{"usb_vcp_active":true}}}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":1001,"args":{"hc_info":{"hc":17,"cmd_sys_ver":"1.0-prelim","fw_ver":"0.1.0","summary":{"usb_vcp_active":true}}}}
 ```
 
 ### 20.3 SET request
@@ -486,22 +486,22 @@ To keep initial firmware implementation simple, the following constraints are re
 
 ### 20.4 Optional SET response using actual HC values
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:23.42","msg":1002,"args":{"beam_on":true}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:23","msg":1002,"args":{"beam_on":true}}
 ```
 
 ### 20.5 Periodic STS packet
 ```json
-{"type":"STS","hc":17,"ts":"20260501 10:14:24.00","state":"NORMAL","beam_on":true,"duts":{"LTC3901":{"state":"NORMAL"},"LT8316":{"state":"NORMAL"}}}
+{"type":"STS","hc":17,"ts":"20260501 10:14:24","state":"NORMAL","beam_on":true,"duts":{"LTC3901":{"state":"NORMAL"},"LT8316":{"state":"NORMAL"}}}
 ```
 
 ### 20.6 Asynchronous EVT packet
 ```json
-{"type":"EVT","hc":17,"ts":"20260501 10:14:24.11","args":{"event":"FAULT","scope":"LT8316","id":"HLF-007","severity":"HIGH"}}
+{"type":"EVT","hc":17,"ts":"20260501 10:14:24","args":{"event":"FAULT","scope":"LT8316","id":"HLF-007","severity":"HIGH"}}
 ```
 
 ### 20.7 Error response
 ```json
-{"type":"RSP","hc":17,"ts":"20260501 10:14:24.20","msg":1002,"error":{"code":"BAD_STATE","message":"SET not permitted while HC is in LOW_LEVEL_FAULT"}}
+{"type":"RSP","hc":17,"ts":"20260501 10:14:24","msg":1002,"error":{"code":"BAD_STATE","message":"SET not permitted while HC is in LOW_LEVEL_FAULT"}}
 ```
 
 ---

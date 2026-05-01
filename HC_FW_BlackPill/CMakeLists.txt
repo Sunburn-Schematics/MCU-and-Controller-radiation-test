@@ -37,7 +37,16 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
+# Link directories setup
+target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    # Add user defined library search paths
+)
+
 # Auto-discover local service sources
+file(GLOB DRIVERS_LOCAL_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Drivers_Local/*.c"
+)
+
 file(GLOB COMMAND_HANDLER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Services/CommandHandler/*.c"
 )
@@ -46,19 +55,21 @@ file(GLOB JSMN_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Services/jsmn/*.c"
 )
 
-# Link directories setup
-target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined library search paths
+file(GLOB RING_BUFFER_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Services/RingBuffer/*.c"
 )
+
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/fw_app.c
     Bsp/bsp_board.c
-    Drivers_Local/sync_drv.c
-    Drivers_Local/usb_vcp_drv.c
+#    Drivers_Local/sync_drv.c
+#    Drivers_Local/usb_vcp_drv.c
+    ${DRIVERS_LOCAL_SOURCES}
     ${COMMAND_HANDLER_SOURCES}
     ${JSMN_SOURCES}
+    ${RING_BUFFER_SOURCES}
 )
 
 # Add include paths
@@ -70,6 +81,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Services
     Services/CommandHandler
     Services/jsmn
+    Services/RingBuffer
 )
 
 # Add project symbols (macros)
