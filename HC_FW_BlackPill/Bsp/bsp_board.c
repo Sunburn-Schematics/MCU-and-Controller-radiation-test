@@ -204,7 +204,7 @@ void bsp_power_disable(bsp_power_domain_t domain)
     bsp_power_write(domain, false);
 }
 
-bool bsp_is_power_enabled(bsp_power_domain_t domain)
+bool bsp_power_is_enabled(bsp_power_domain_t domain)
 {
     assert(prv_is_valid_power_domain(domain));
 

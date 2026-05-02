@@ -2,26 +2,37 @@
 #define HC_APP_STATUS_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef enum
-{
-    HC_APP_STATE_BOOT = 0,
-    HC_APP_STATE_FAULT,
-    HC_APP_STATE_NORMAL,
-    HC_APP_STATE_SLAVE
-} hc_app_state_t;
+#define HC_APP_STATE_TABLE(X) \
+    X(HC_APP_STATE_BOOT,   "BOOT") \
+    X(HC_APP_STATE_FAULT,  "FAULT") \
+    X(HC_APP_STATE_NORMAL, "NORMAL") \
+    X(HC_APP_STATE_SLAVE,  "SLAVE")
 
 typedef enum
 {
-    HC_DUT_STATE_NORMAL = 0,
-    HC_DUT_STATE_RECOVERED,
-    HC_DUT_STATE_ISOLATED,
-    HC_DUT_STATE_FAULT
+#define X(name, str) name,
+    HC_APP_STATE_TABLE(X)
+#undef X
+} hc_app_state_t;
+
+#define HC_DUT_STATE_TABLE(X) \
+    X(HC_DUT_STATE_NORMAL,    "NORMAL") \
+    X(HC_DUT_STATE_RECOVERED, "RECOVERED") \
+    X(HC_DUT_STATE_ISOLATED,  "ISOLATED") \
+    X(HC_DUT_STATE_FAULT,     "FAULT")
+
+typedef enum
+{
+#define X(name, str) name,
+    HC_DUT_STATE_TABLE(X)
+#undef X
 } hc_dut_state_t;
 
 typedef struct
@@ -69,8 +80,10 @@ typedef struct
 } hc_app_status_t;
 
 void hc_app_status_init(void);
+void hc_app_status_refresh_from_bsp(void);
 hc_app_status_t *hc_app_status_get(void);
 const hc_app_status_t *hc_app_status_get_const(void);
+bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len);
 
 const char *hc_app_state_to_string(hc_app_state_t state);
 const char *hc_dut_state_to_string(hc_dut_state_t state);
