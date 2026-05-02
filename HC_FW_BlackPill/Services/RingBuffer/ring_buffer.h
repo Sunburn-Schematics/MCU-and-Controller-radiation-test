@@ -32,6 +32,7 @@ size_t rb_push(RB_HandleTypeDef *hRb, const uint8_t *data, size_t length);
 
 bool rb_pop_byte(RB_HandleTypeDef *hRb, uint8_t *value);
 size_t rb_pop(RB_HandleTypeDef *hRb, uint8_t *data, size_t length);
+size_t rb_preview(RB_HandleTypeDef *hRb, uint8_t *data, size_t length);
 
 bool rb_peek(const RB_HandleTypeDef *hRb, size_t index, uint8_t *value);
 bool rb_contains_byte(const RB_HandleTypeDef *hRb, uint8_t value);

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "architecture.md",
+                "file": "JSON_Tests.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "architecture"
+              "title": "JSON_Tests"
             }
           }
         ]
@@ -184,5 +184,11 @@
     }
   },
   "active": "79f6f1e3e6facd0e",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md",
+    "Index.md",
+    "JSON_Tests.md",
+    "tc_hc_jsonl_command_structure_preliminary_v1.md",
+    "architecture.md"
+  ]
 }

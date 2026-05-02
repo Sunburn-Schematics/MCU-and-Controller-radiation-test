@@ -241,9 +241,8 @@ No further detailed cadence definition is required for v1.
 
 The `STS` message shall use JSONL framing and should include, at minimum, one JSON object per emitted line containing:
 - `type` = `STS`
-- `version`
 - `hc_id`
-- `tsb`
+- `ts`
 - `state` (`BOOT`, `FAULT`, `NORMAL`, or `SLAVE`)
 - `beam_on`
 - `duts`
@@ -255,9 +254,8 @@ Detailed measurements, counters, and fault evidence that are not part of the agr
 #### 8.3.1 Required v1 Top-Level JSONL Keys
 The v1 `STS` object shall use these top-level keys:
 - `type`
-- `version`
 - `hc_id`
-- `tsb`
+- `ts`
 - `state`
 - `beam_on`
 - `duts`
@@ -318,7 +316,7 @@ For v1, the following conventions are recommended:
 - `duts.<name>.state` uses one of: `NORMAL`, `RECOVERED`, `ISOLATED`, `FAULT`
 - `beam_on` uses a JSON boolean
 - `hc_id` uses a JSON integer representing the HC hardware ID
-- `tsb` uses a monotonic integer time-base value from HC firmware
+- `ts` uses the HC RTC-backed timestamp string format `YYYYMMDD HH:MM:SS`
 - `vsupply` uses millivolts (`mV`)
 - `vshunt` uses millivolts (`mV`)
 - `isupply` uses milliamps (`mA`)
@@ -420,7 +418,7 @@ Immediate event emission is not required for DUT-local fault, restart, recovery,
 
 #### 8.3.12 Canonical Example `STS` JSONL Object
 Example single emitted JSONL line:
-- `{ "type": "STS", "version": "1.0", "hc_id": 63, "tsb": 123456, "state": "NORMAL", "beam_on": true, "duts": { "LTC3901": { "state": "NORMAL", "pwr_en": true, "sync": true, "vsupply": 12345, "vshunt": 12345, "isupply": 12345, "me_freq": 12345, "me_ratio": 50, "me_anlg": 12345, "mf_freq": 12345, "mf_ratio": 50, "mf_anlg": 12345, "faults": { "count": 0, "summary": "NONE", "ids": [] } }, "LT8316": { "state": "NORMAL", "pwr_en": true, "gate_freq": 12345, "gate_ratio": 50, "gate_anlg": 12345, "vout": 12345, "faults": { "count": 1, "summary": "SINGLE", "ids": ["HLF-010"] } } } }`
+- `{ "type": "STS", "hc_id": 63, "ts": "20260501 10:30:00", "state": "NORMAL", "beam_on": true, "duts": { "LTC3901": { "state": "NORMAL", "pwr_en": true, "sync": true, "vsupply": 12345, "vshunt": 12345, "isupply": 12345, "me_freq": 12345, "me_ratio": 50, "me_anlg": 12345, "mf_freq": 12345, "mf_ratio": 50, "mf_anlg": 12345, "faults": { "count": 0, "summary": "NONE", "ids": [] } }, "LT8316": { "state": "NORMAL", "pwr_en": true, "gate_freq": 12345, "gate_ratio": 50, "gate_anlg": 12345, "vout": 12345, "faults": { "count": 1, "summary": "SINGLE", "ids": ["HLF-010"] } } } }`
 
 Field ordering should be kept stable in firmware where practical, even though JSON object ordering is not semantically significant.
 

@@ -18,7 +18,32 @@ bool hc_jsonl_rsp_build_set_datetime_ok(char *out,
 
     written = snprintf(out,
                        out_size,
-                       "{\"type\":\"RSP\",\"hc\":%lu,\"msg\":%lu,\"ts\":\"%s\",\"args\":{\"date_time\":\"%s\"}}\n",
+                       "{\"type\":\"RSP\",\"hc\":%lu,\"msg\":%lu,\"ts\":\"%s\",\"args\":{\"date_time\":\"%s\"}}",
+                       (unsigned long)hc_id,
+                       (unsigned long)msg,
+                       ts,
+                       date_time);
+
+    return ((written > 0) && ((size_t)written < out_size));
+}
+
+bool hc_jsonl_rsp_build_get_datetime_ok(char *out,
+                                        size_t out_size,
+                                        uint32_t hc_id,
+                                        uint32_t msg,
+                                        const char *ts,
+                                        const char *date_time)
+{
+    int written;
+
+    if ((out == NULL) || (out_size == 0u) || (ts == NULL) || (date_time == NULL))
+    {
+        return false;
+    }
+
+    written = snprintf(out,
+                       out_size,
+                       "{\"type\":\"RSP\",\"hc\":%lu,\"msg\":%lu,\"ts\":\"%s\",\"args\":{\"date_time\":\"%s\"}}",
                        (unsigned long)hc_id,
                        (unsigned long)msg,
                        ts,
@@ -47,7 +72,7 @@ bool hc_jsonl_rsp_build_error(char *out,
     {
         written = snprintf(out,
                            out_size,
-                           "{\"type\":\"RSP\",\"hc\":%lu,\"msg\":%lu,\"ts\":\"%s\",\"error\":{\"code\":\"%s\",\"message\":\"%s\"}}\n",
+                           "{\"type\":\"RSP\",\"hc\":%lu,\"msg\":%lu,\"ts\":\"%s\",\"error\":{\"code\":\"%s\",\"message\":\"%s\"}}",
                            (unsigned long)hc_id,
                            (unsigned long)msg,
                            ts,
@@ -58,7 +83,7 @@ bool hc_jsonl_rsp_build_error(char *out,
     {
         written = snprintf(out,
                            out_size,
-                           "{\"type\":\"RSP\",\"hc\":%lu,\"ts\":\"%s\",\"error\":{\"code\":\"%s\",\"message\":\"%s\"}}\n",
+                           "{\"type\":\"RSP\",\"hc\":%lu,\"ts\":\"%s\",\"error\":{\"code\":\"%s\",\"message\":\"%s\"}}",
                            (unsigned long)hc_id,
                            ts,
                            code,

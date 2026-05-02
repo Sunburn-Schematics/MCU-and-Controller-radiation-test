@@ -22,6 +22,8 @@
 
 /* USER CODE BEGIN 0 */
 
+#include "reset_reason_drv.h"
+
 /* USER CODE END 0 */
 
 RTC_HandleTypeDef hrtc;
@@ -56,7 +58,10 @@ void MX_RTC_Init(void)
   }
 
   /* USER CODE BEGIN Check_RTC_BKUP */
-
+  if (!reset_reason_drv_was_power_on_reset())
+  {
+    return;
+  }
   /* USER CODE END Check_RTC_BKUP */
 
   /** Initialize RTC and set the Time and Date

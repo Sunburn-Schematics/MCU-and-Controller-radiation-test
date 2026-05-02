@@ -21,6 +21,8 @@ hc_cmd_status_t hc_jsonl_dispatch_request(const char *line,
             return hc_jsonl_handle_set(line, tokens, request, rsp_buf, rsp_buf_size);
 
         case HC_PKT_GET:
+            return hc_jsonl_handle_get(line, tokens, request, rsp_buf, rsp_buf_size);
+
         case HC_PKT_EXC:
         default:
             if (!hc_jsonl_rsp_build_error(rsp_buf,

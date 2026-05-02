@@ -24,6 +24,8 @@ This file is the top-level reference for locating and editing the HC documentati
 - [hc_te_interface_spec_v1.md](./hc_te_interface_spec_v1.md) — HC-to-TE interface specification, including periodic STS reporting model.
 - [hc_variable_registry_v1.md](./hc_variable_registry_v1.md) — Registry of named variable placeholders for deferred numeric values.
 - [hc_verification_traceability_matrix_v1.md](./hc_verification_traceability_matrix_v1.md) — Traceability from requirements to verification intent and coverage.
+- [JSON_Tests.md](./JSON_Tests.md) — Current JSON request/response test vectors for command processor framing, SET/GET date_time behavior, and malformed-input checks.
+- [requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md](./requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md) — Reset-source capture, POR-gated RTC initialization policy, and retained reset-reason monitoring intent.
 - [tc_hc_jsonl_command_structure_preliminary_v1.md](./tc_hc_jsonl_command_structure_preliminary_v1.md) — Preliminary JSONL command structure for TC↔HC communications over USB VCP.
 - [Index.md](./Index.md) — Top-level navigation file for the documentation set.
 

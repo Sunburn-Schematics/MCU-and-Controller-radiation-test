@@ -19,6 +19,10 @@ hc_cmd_status_t hc_jsonl_parse_set_date_time(const char *line,
                                              char *date_time_out,
                                              size_t date_time_out_size);
 
+hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
+                                             const jsmntok_t *tokens,
+                                             const hc_cmd_request_t *request);
+
 #ifdef __cplusplus
 }
 #endif

@@ -21,7 +21,8 @@ Current limitations:
 - only `args.date_time` is currently supported.
 - `GET` and `EXC` currently return `NOT_SUPPORTED`.
 - `hc` is currently emitted using a temporary fixed value of `1` pending integration with the HC identity source.
-- transport integration into USB VCP RX/TX execution flow under `fw_app_run()` is still pending.
+- command processing is now integrated into `fw_app_run()` via `command_processor_task()`.
+- framing is now based on balanced top-level JSON objects rather than requiring newline termination.
 
 ## 1. Purpose
 
@@ -32,12 +33,12 @@ Initial target message sequence:
 
 ### TE → HC
 ```json
-{"type":"SET","msg":0,"args":{"date_time":"20260501 10:30:00.00"}}
+{"type":"SET","msg":0,"args":{"date_time":"20260501 10:30:00"}}
 ```
 
 ### HC → TE
 ```json
-{"type":"RSP","msg":0,"ts":"20260501 10:30:00.00","args":{"date_time":"20260501 10:30:00.00"}}
+{"type":"RSP","hc":1,"msg":0,"ts":"20260501 10:30:00","args":{"date_time":"20260501 10:30:00"}}
 ```
 
 This plan is intentionally implementation-oriented. It focuses on module boundaries, data flow, validation steps, and the minimum first increment needed to get a working command processor into the firmware.
@@ -68,7 +69,7 @@ The existing `Services\jsmn` folder is the right place to anchor the JSONL comma
 ## 3. Implementation Goal for the First Increment
 
 The first firmware increment should support exactly this capability:
-- receive one newline-terminated JSONL packet from the USB VCP,
+- receive one complete top-level JSON object from the USB VCP byte stream,
 - parse it using `jsmn`,
 - validate that it is a supported `SET` packet,
 - validate `msg`,
@@ -88,9 +89,9 @@ The implementation should be split into five layers.
 ### 4.1 Transport Input Layer
 Responsibility:
 - receive raw bytes from USB CDC/VCP,
-- accumulate bytes into a line buffer,
-- detect end-of-line,
-- hand complete JSONL frames to the command processor.
+- append bytes into an RX ring buffer,
+- expose those bytes to the application via a simple byte-read API,
+- remain protocol-agnostic.
 
 Suggested ownership:
 - `Drivers_Local\usb_vcp_drv.*`
@@ -98,12 +99,16 @@ Suggested ownership:
 
 ### 4.2 Frame Buffering Layer
 Responsibility:
-- maintain one RX line buffer,
-- reject oversized frames,
-- normalize line termination if needed,
+- maintain one RX message buffer,
+- detect one complete top-level JSON object by balanced braces,
+- ignore braces inside JSON strings,
+- reject oversized objects,
 - present a null-terminated JSON string to the parser.
 
 This layer should be very small and deterministic.
+
+Suggested ownership:
+- `Services\CommandHandler\command_processor.*`
 
 ### 4.3 JSON Parse Layer
 Responsibility:
@@ -273,9 +278,11 @@ This should remain lightweight. Avoid deep copying JSON fields unless required.
 
 ### 7.1 RX Path
 1. USB CDC receives bytes.
-2. Bytes are appended into an HC command RX line buffer.
-3. On newline, the frame is terminated with `\0`.
-4. The completed line is handed to `hc_jsonl_cmd_process_line()`.
+2. Bytes are appended into the USB VCP RX ring buffer.
+3. `command_processor_task()` pulls bytes via `usb_vcp_read()`.
+4. The command processor tracks balanced top-level JSON braces, string state, and escapes.
+5. When one complete JSON object is assembled, it is terminated with `\0`.
+6. The completed object is handed to `hc_jsonl_cmd_process_line()`.
 
 ### 7.2 Parse and Validate Path
 1. Parse JSON with `jsmn`.
@@ -308,7 +315,7 @@ On any failure:
 For the first increment, validate only the wire-format string plus basic range sanity.
 
 Required format:
-- `YYYYMMDD HH:MM:SS.MS`
+- `YYYYMMDD HH:MM:SS`
 
 Expected fixed positions:
 - positions `0..7` = date digits
@@ -318,8 +325,6 @@ Expected fixed positions:
 - positions `12..13` = minute digits
 - position `14` = `:`
 - positions `15..16` = second digits
-- position `17` = `.`
-- positions `18..19` = centisecond/millisecond digits as currently specified
 
 ### 8.1 Minimum v1 Validation
 - exact length check,
@@ -416,7 +421,7 @@ bool hc_comms_tx_send_line(const char *line);
 For the first `SET date_time` implementation, generate:
 
 ```json
-{"type":"RSP","msg":0,"ts":"20260501 10:30:00.00","args":{"date_time":"20260501 10:30:00.00"}}
+{"type":"RSP","hc":1,"msg":0,"ts":"20260501 10:30:00","args":{"date_time":"20260501 10:30:00"}}
 ```
 
 ### 11.1 Important Note
@@ -432,7 +437,7 @@ Two options:
 
 Example if aligned to current preliminary spec:
 ```json
-{"type":"RSP","hc":17,"msg":0,"ts":"20260501 10:30:00.00","args":{"date_time":"20260501 10:30:00.00"}}
+{"type":"RSP","hc":17,"msg":0,"ts":"20260501 10:30:00","args":{"date_time":"20260501 10:30:00"}}
 ```
 
 I recommend resolving this before coding the formatter.
@@ -444,7 +449,7 @@ I recommend resolving this before coding the formatter.
 Recommended error shape:
 
 ```json
-{"type":"RSP","msg":0,"ts":"20260501 10:30:00.00","error":{"code":"BAD_VALUE","message":"Invalid date_time format"}}
+{"type":"RSP","hc":1,"msg":0,"ts":"20260501 10:30:00","error":{"code":"BAD_VALUE","message":"Invalid date_time format"}}
 ```
 
 Possible initial error codes:
@@ -472,7 +477,7 @@ Possible initial error codes:
 ## 13. Buffering Recommendations
 
 ### 13.1 RX Buffer
-Use a fixed RX line buffer sized for modest protocol expansion.
+Use a fixed RX message buffer sized for modest protocol expansion.
 
 Suggested starting size:
 - `256` bytes minimum
@@ -496,7 +501,7 @@ Suggested starting size:
 ## 14. Determinism and Safety Rules
 
 For the first increment:
-- process one complete line at a time,
+- process one complete JSON object at a time,
 - do not accept partial JSON as executable state,
 - do not mutate HC date/time until the full packet is validated,
 - do not parse in interrupt context if avoidable,
@@ -505,7 +510,7 @@ For the first increment:
 
 Recommended execution model:
 - ISR or CDC receive callback only appends bytes into a buffer or queue,
-- main loop performs parse/dispatch/respond.
+- main loop performs JSON-object framing, parse, dispatch, and respond.
 
 ---
 
@@ -513,8 +518,8 @@ Recommended execution model:
 
 ### Step 1. Establish transport handoff
 - confirm where USB CDC bytes enter firmware,
-- add a line accumulator,
-- route complete lines to a command processor stub.
+- add a JSON-object accumulator,
+- route complete objects to a command processor stub.
 
 ### Step 2. Implement parser skeleton
 - parse root object,
@@ -576,7 +581,7 @@ This keeps parser/dispatcher/handler boundaries clean.
 The first accepted TE packet should be exactly this pattern:
 
 ```json
-{"type":"SET","msg":<number>,"args":{"date_time":"YYYYMMDD HH:MM:SS.MS"}}
+{"type":"SET","msg":<number>,"args":{"date_time":"YYYYMMDD HH:MM:SS"}}
 ```
 
 All other packets should initially fail cleanly.
@@ -607,7 +612,7 @@ Once implementation starts, the following documents should also be updated:
 ## 19. Recommended Immediate Next Action
 
 Implement the first vertical slice in this order:
-1. USB VCP line accumulation
+1. USB VCP byte accumulation plus JSON-object framing
 2. `hc_jsonl_cmd_process_line()`
 3. `jsmn` parse helpers for `type`, `msg`, and `args.date_time`
 4. `hc_datetime_set()`

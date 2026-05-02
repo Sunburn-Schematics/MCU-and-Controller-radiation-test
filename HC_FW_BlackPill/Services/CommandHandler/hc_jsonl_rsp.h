@@ -14,6 +14,13 @@ bool hc_jsonl_rsp_build_set_datetime_ok(char *out,
                                         const char *ts,
                                         const char *date_time);
 
+bool hc_jsonl_rsp_build_get_datetime_ok(char *out,
+                                        size_t out_size,
+                                        uint32_t hc_id,
+                                        uint32_t msg,
+                                        const char *ts,
+                                        const char *date_time);
+
 bool hc_jsonl_rsp_build_error(char *out,
                               size_t out_size,
                               uint32_t hc_id,

@@ -227,3 +227,47 @@ hc_cmd_status_t hc_jsonl_parse_set_date_time(const char *line,
 
     return HC_CMD_OK;
 }
+
+hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
+                                             const jsmntok_t *tokens,
+                                             const hc_cmd_request_t *request)
+{
+    int args_index;
+    int date_time_index;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    args_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, 0, "args");
+    if (args_index < 0)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    if (tokens[args_index].type != JSMN_OBJECT)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    date_time_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "date_time");
+    if (date_time_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (!hc_jsonl_token_is_primitive(&tokens[date_time_index]))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    if (!hc_jsonl_token_equals(line, &tokens[date_time_index], "true"))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    return HC_CMD_OK;
+}

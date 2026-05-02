@@ -5,14 +5,13 @@
  * transmitted.
  */
 #include "usb_vcp_drv.h"
+#include "ring_buffer.h"
 #include "usbd_cdc_if.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/_intsup.h>
-
-#include "../Services/CommandHandler/hc_jsonl_cmd.h"
 
 /* Defined in usbd_cdc_if.h 
     These buffers are used by the USB CDC interface to store incoming and outgoing data. The VCP driver can read from the Rx buffer and write to the Tx buffer as needed. 
@@ -22,15 +21,100 @@ extern char UserRxBufferFS[];    //Data received over USB is stored in this buff
 extern char UserTxBufferFS[];    //Data to send over USB CDC are stored in this buffer
 
 static char usb_vcp_TxBuffer[VCP_TX_BUFFER_SIZE];    // Local buffer for data to be transmitted; will be copied to UserTxBufferFS when data is ready to be sent. This allows the VCP driver to manage its own buffer indices without interfering with the USB CDC interface's buffer management.
+static char usb_vcp_RxBuffer[VCP_RX_BUFFER_SIZE];    // Local buffer for data received over USB; will be copied from UserRxBufferFS when new data is received. This allows the VCP driver to manage its own buffer indices and processing without interfering with the USB CDC interface's buffer management.
 
-static uint32_t TxInsertIdx = 0; // Index for inserting data into the Tx buffer
-static uint32_t TxExtractIdx = 0; // Index for extracting data from the Tx buffer
+// static uint32_t TxInsertIdx = 0; // Index for inserting data into the Tx buffer
+// static uint32_t TxExtractIdx = 0; // Index for extracting data from the Tx buffer
 
 static VCP_HandleTypeDef hVcp = {0};    // Global instance of the VCP handle, defined in usb_vcp_drv.h and initialized in usb_vcp_drv_init()
 static VCP_MetricsTypeDef vcp_metrics = {0}; // Structure to hold various metrics about VCP operation, such as packet counts and dropped packet counts
 
 
+int _write(int file, char *ptr, int len)    
+{
+    if (rb_free_space(&hVcp.tx_rb) >= len) {
+        rb_push(&hVcp.tx_rb, (uint8_t*)ptr, (size_t)len);
+        return len;
+    }
+    return 0;
+}
 
+int _read(int file, char *ptr, int len)
+{
+    size_t bytes_read = rb_pop(&hVcp.rx_rb, (uint8_t*)ptr, (size_t)len);
+    return (int)bytes_read;
+}
+
+int usb_vcp_read(uint8_t *pData, uint32_t length)
+{
+    if ((pData == NULL) || (length == 0u))
+    {
+        return 0;
+    }
+
+    return (int)rb_pop(&hVcp.rx_rb, pData, (size_t)length);
+}
+
+/* Called on reception of each USB packet */
+/* TREAT THIS LIKE ITS INSIDE AN ISR - i.e. NO printf() calls */
+int8_t usb_vcp_buffer_rx_pkt(uint8_t* Buf, uint32_t Len)
+{
+    if (rb_free_space(&hVcp.rx_rb) >= Len) {
+        rb_push(&hVcp.rx_rb, Buf, (size_t)Len);
+        return (VCP_OK);
+    }
+    return (VCP_FAIL);
+}
+
+VCP_StatusTypeDef usb_vcp_drv_init(void)
+{
+    assert_param(TX_BUFFER_SIZE & (TX_BUFFER_SIZE - 1) == 0U);      // Ensures buffer size is a power of 2
+    assert_param(RX_BUFFER_SIZE & (RX_BUFFER_SIZE - 1) == 0U);      // Ensures buffer size is a power of 2
+
+    rb_init(&hVcp.tx_rb, (uint8_t*)usb_vcp_TxBuffer, VCP_TX_BUFFER_SIZE); // Initialize the transmit ring buffer with the local Tx buffer
+    rb_init(&hVcp.rx_rb, (uint8_t*)usb_vcp_RxBuffer, VCP_RX_BUFFER_SIZE); // Initialize the receive ring buffer with the local Rx buffer
+
+    setvbuf(stdin, NULL, _IONBF, 0);    // Disable buffering for stdin to ensure immediate reception over USB VCP
+//    setvbuf(stdout, NULL, _IONBF, 0);   // Disable buffering for stdout to ensure immediate transmission over USB VCP
+    return (VCP_OK);
+}
+
+VCP_StatusTypeDef usb_vcp_drv_task(void) 
+{
+    /* Push Outgoing Messages */
+    if (!rb_is_empty(&hVcp.tx_rb))
+    {
+        uint8_t chunk[MAX_USB_PACKET_SIZE];
+        size_t chunk_size = (rb_free_space(&hVcp.tx_rb) < MAX_USB_PACKET_SIZE) ? rb_free_space(&hVcp.tx_rb) : MAX_USB_PACKET_SIZE;
+
+        // Preview data from the transmit ring buffer into a temporary chunk buffer
+        size_t bytes_to_send = rb_preview(&hVcp.tx_rb, chunk, chunk_size);
+
+        // Attempt to transmit the chunk over USB CDC
+        if (CDC_Transmit_FS(chunk, (uint16_t)bytes_to_send) != USBD_OK)
+        {
+            vcp_metrics.blocked_tx_pkt_count += 1; // Increment blocked packet count if transmission fails
+        } else {
+            rb_pop(&hVcp.tx_rb, chunk, bytes_to_send);     // The transmit succeeded so actually pop the data off the transmit ring buffer now that it's been sent
+        }
+    }
+
+    // /* Process incoming messages */
+    // if (hVcp.vcp_rx_status == VCP_RECEIVED_DATA_AVAILABLE)
+    // {
+    //     printf("usb_vcp_drv_task: Processing msg[%ld](%d): \"%s\"\n", hVcp.vcp_rx_msg_len, strlen(hVcp.vcp_rx_msg_buffer), hVcp.vcp_rx_msg_buffer);
+    //     hVcp.vcp_rx_status = VCP_BUSY;
+    //     hc_jsonl_process_command(hVcp.vcp_rx_msg_buffer, hVcp.vcp_rx_msg_len);
+    //     hVcp.vcp_rx_msg_buffer[0] = '\0'; // Clear the buffer after processing
+    //     hVcp.vcp_rx_msg_len = 0; // Reset message length after processing
+    //     hVcp.vcp_rx_status = VCP_READY;
+    // }
+
+    return VCP_OK;
+}
+
+
+#if 0
 /* Called on reception of each USB packet */
 /* TREAT THIS LIKE ITS INSIDE AN ISR - i.e. NO printf() calls */
 int8_t usb_vcp_buffer_rx_pkt(uint8_t* Buf, uint32_t Len)
@@ -67,11 +151,13 @@ int8_t usb_vcp_buffer_rx_pkt(uint8_t* Buf, uint32_t Len)
     return (VCP_OK);
 }
 
-
-VCP_StatusTypeDef usb_vcp_drv_init(void)
+VCP_StatusTypeDef usb_vcp_drv_init_old(void)
 {
     assert_param(TX_BUFFER_SIZE & (TX_BUFFER_SIZE - 1) == 0U);      // Ensures buffer size is a power of 2
     assert_param(RX_BUFFER_SIZE & (RX_BUFFER_SIZE - 1) == 0U);      // Ensures buffer size is a power of 2
+
+    rb_init(&hVcp.tx_rb, (uint8_t*)usb_vcp_TxBuffer, VCP_TX_BUFFER_SIZE); // Initialize the transmit ring buffer with the local Tx buffer
+    rb_init(&hVcp.rx_rb, (uint8_t*)usb_vcp_RxBuffer, VCP_RX_BUFFER_SIZE); // Initialize the receive ring buffer with the local Rx buffer
 
     hVcp.Lock = HAL_UNLOCKED;                     // Initialize lock to unlocked state
     hVcp.vcp_rx_status = VCP_READY;                // Initialize receive status to ready
@@ -83,8 +169,7 @@ VCP_StatusTypeDef usb_vcp_drv_init(void)
     return (VCP_OK);
 }
 
-
-int _write(int file, char *ptr, int len)
+int _write_old(int file, char *ptr, int len)
 {
 	int32_t DataIdx = 0;
 	int32_t BlockAddr = (TxExtractIdx - 1) & (VCP_TX_BUFFER_SIZE - 1);
@@ -97,7 +182,6 @@ int _write(int file, char *ptr, int len)
 	}
 	return DataIdx;
 }
-
 
 VCP_StatusTypeDef usb_vcp_drv_task(void) 
 {
@@ -134,5 +218,6 @@ VCP_StatusTypeDef usb_vcp_drv_task(void)
 
     return VCP_OK;
 }
+#endif
 
 

@@ -29,6 +29,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "fw_app.h"
+#include "reset_reason_drv.h"
 #include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
@@ -81,6 +82,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+  reset_reason_drv_init();
 
   /* USER CODE END Init */
 

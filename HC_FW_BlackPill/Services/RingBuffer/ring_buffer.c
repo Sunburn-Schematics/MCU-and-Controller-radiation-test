@@ -147,6 +147,23 @@ size_t rb_pop(RB_HandleTypeDef *hRb, uint8_t *data, size_t length)
     return read;
 }
 
+size_t rb_preview(RB_HandleTypeDef *hRb, uint8_t *data, size_t length)
+{
+    size_t read = 0u;
+
+    if (!rb_is_valid(hRb) || (data == NULL))
+    {
+        return 0u;
+    }
+
+    while ((read < length) && rb_peek(hRb, read, &data[read]))
+    {
+        read++;
+    }
+
+    return read;
+}
+
 bool rb_peek(const RB_HandleTypeDef *hRb, size_t index, uint8_t *value)
 {
     size_t pos;
