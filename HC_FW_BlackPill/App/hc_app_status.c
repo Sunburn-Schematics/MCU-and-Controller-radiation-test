@@ -2,7 +2,10 @@
 
 #include <stdio.h>
 
+#include "bsp_board.h"
+#include "adc_sense_drv.h"
 #include "hc_datetime.h"
+#include "pwm_capture_drv.h"
 
 static hc_app_status_t s_hc_app_status;
 
@@ -46,6 +49,16 @@ static void hc_app_fault_summary_init(hc_fault_summary_t *faults)
     faults->IdsJson = "[]";
 }
 
+static hc_dut_state_t hc_app_dut_state_from_power_enabled(bool power_enabled)
+{
+    return power_enabled ? HC_DUT_STATE_NORMAL : HC_DUT_STATE_ISOLATED;
+}
+
+static int32_t hc_app_ratio_x100_to_pct(uint16_t ratio_x100)
+{
+    return (int32_t)((ratio_x100 + 50U) / 100U);
+}
+
 void hc_app_status_init(void)
 {
     s_hc_app_status.HcId = 1U;
@@ -73,6 +86,66 @@ void hc_app_status_init(void)
     s_hc_app_status.Lt8316.GateAnlg_mV = -1;
     s_hc_app_status.Lt8316.VOut_mV = -1;
     hc_app_fault_summary_init(&s_hc_app_status.Lt8316.Faults);
+
+    hc_app_status_refresh_from_bsp();
+}
+
+void hc_app_status_refresh_from_bsp(void)
+{
+    bsp_status_t bsp_status;
+    pwm_capture_result_t capture_result;
+
+    bsp_get_status(&bsp_status);
+
+    s_hc_app_status.HcId = (uint32_t)bsp_status.id_raw;
+    s_hc_app_status.BeamOn = bsp_status.beam_on;
+
+    s_hc_app_status.Ltc3901.PowerEnabled = bsp_power_is_enabled(BSP_POWER_LTC3901);
+    s_hc_app_status.Ltc3901.SyncEnabled = true;
+    s_hc_app_status.Ltc3901.State = hc_app_dut_state_from_power_enabled(s_hc_app_status.Ltc3901.PowerEnabled);
+    s_hc_app_status.Ltc3901.VSupply_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_VUPSTREAM);
+    s_hc_app_status.Ltc3901.VShunt_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_VCC);
+    s_hc_app_status.Ltc3901.MeAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_ME_ANLG);
+    s_hc_app_status.Ltc3901.MfAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_MF_ANLG);
+    if (pwm_capture_drv_get_result(PWM_CAPTURE_SIGNAL_LTC3901_ME, &capture_result))
+    {
+        s_hc_app_status.Ltc3901.MeFreq_Hz = (int32_t)capture_result.frequency_hz;
+        s_hc_app_status.Ltc3901.MeRatio_Pct = capture_result.has_duty_cycle ?
+                                              hc_app_ratio_x100_to_pct(capture_result.duty_pct_x100) : -1;
+    }
+    else
+    {
+        s_hc_app_status.Ltc3901.MeFreq_Hz = -1;
+        s_hc_app_status.Ltc3901.MeRatio_Pct = -1;
+    }
+
+    if (pwm_capture_drv_get_result(PWM_CAPTURE_SIGNAL_LTC3901_MF, &capture_result))
+    {
+        s_hc_app_status.Ltc3901.MfFreq_Hz = (int32_t)capture_result.frequency_hz;
+        s_hc_app_status.Ltc3901.MfRatio_Pct = capture_result.has_duty_cycle ?
+                                              hc_app_ratio_x100_to_pct(capture_result.duty_pct_x100) : -1;
+    }
+    else
+    {
+        s_hc_app_status.Ltc3901.MfFreq_Hz = -1;
+        s_hc_app_status.Ltc3901.MfRatio_Pct = -1;
+    }
+
+    s_hc_app_status.Lt8316.PowerEnabled = bsp_power_is_enabled(BSP_POWER_LT8316);
+    s_hc_app_status.Lt8316.State = hc_app_dut_state_from_power_enabled(s_hc_app_status.Lt8316.PowerEnabled);
+    s_hc_app_status.Lt8316.GateAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LT8316_GATE_ANLG);
+    s_hc_app_status.Lt8316.VOut_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LT8316_VOUT);
+    if (pwm_capture_drv_get_result(PWM_CAPTURE_SIGNAL_LT8316_GATE, &capture_result))
+    {
+        s_hc_app_status.Lt8316.GateFreq_Hz = (int32_t)capture_result.frequency_hz;
+        s_hc_app_status.Lt8316.GateRatio_Pct = capture_result.has_duty_cycle ?
+                                               hc_app_ratio_x100_to_pct(capture_result.duty_pct_x100) : -1;
+    }
+    else
+    {
+        s_hc_app_status.Lt8316.GateFreq_Hz = -1;
+        s_hc_app_status.Lt8316.GateRatio_Pct = -1;
+    }
 }
 
 hc_app_status_t *hc_app_status_get(void)

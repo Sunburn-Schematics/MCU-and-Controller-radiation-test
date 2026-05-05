@@ -24,6 +24,7 @@ This file is the top-level reference for locating and editing the HC documentati
 - [hc_te_interface_spec_v1.md](./hc_te_interface_spec_v1.md) — HC-to-TE interface specification, including periodic STS reporting model.
 - [hc_variable_registry_v1.md](./hc_variable_registry_v1.md) — Registry of named variable placeholders for deferred numeric values.
 - [hc_verification_traceability_matrix_v1.md](./hc_verification_traceability_matrix_v1.md) — Traceability from requirements to verification intent and coverage.
+- [Debug_Signals.md](./Debug_Signals.md) — Dictionary of supported `dbg_signals` names, types, units, sources, and null behavior.
 - [JSON_Tests.md](./JSON_Tests.md) — Current JSON request/response test vectors for command processor framing, SET/GET date_time behavior, and malformed-input checks.
 - [requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md](./requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md) — Reset-source capture, POR-gated RTC initialization policy, and retained reset-reason monitoring intent.
 - [tc_hc_jsonl_command_structure_preliminary_v1.md](./tc_hc_jsonl_command_structure_preliminary_v1.md) — Preliminary JSONL command structure for TC↔HC communications over USB VCP.
@@ -39,3 +40,7 @@ This file is the top-level reference for locating and editing the HC documentati
 - Use `hc_product_specification_review_v1.md` for offline human review of the current consolidated product definition.
 - Use `hc_product_specification_amalgamated_v1.md` only when cross-checking source content in bulk.
 - Use the specific source files for detailed edits in their own domains.
+
+## Note
+- `architecture.md` has been updated to describe the current `Drivers_Local/adc_sense_drv.*` ADC acquisition implementation and its present scope limitations.
+- `Debug_Signals.md` is the primary human-readable reference for the current debug telemetry data dictionary.

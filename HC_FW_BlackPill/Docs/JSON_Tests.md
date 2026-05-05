@@ -7,10 +7,15 @@ This document provides simple test vectors for the current first-slice HC comman
 Current implemented scope:
 - command processor frames one complete top-level JSON object from the USB byte stream
 - `CommandHandler` supports `SET` and `GET`
-- only `args.date_time` is currently supported
+- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, and `args.dbg_signals`
+- `SET` also supports `args.adc_cal`
+- `GET` currently supports `args.date_time`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
 - timestamps use seconds-only format: `YYYYMMDD HH:MM:SS`
 - current temporary HC identifier in responses is `1`
-- periodic `STS` transmission is emitted by `fw_app_run()` at a nominal 1 Hz rate as a best-effort application-layer heartbeat/status message
+- periodic `STS` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
+- `args.sts_period_ms = 0` disables periodic `STS` transmission
+- periodic `DBG` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
+- `args.dbg_period_ms = 0` disables periodic `DBG` transmission
 
 ---
 
@@ -70,7 +75,42 @@ Notes:
 
 ---
 
-### 4. Valid JSON object without trailing newline
+### 4. Valid `SET sts_period_ms`
+
+Request:
+```json
+{"type":"SET","msg":18,"args":{"sts_period_ms":250}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":18,"ts":"20260501 10:30:00","args":{"sts_period_ms":250}}
+```
+
+Notes:
+- this sets the nominal periodic `STS` transmit interval to 250 ms
+- the updated interval applies to subsequent periodic status emission
+
+---
+
+### 5. Valid `SET sts_period_ms` disable
+
+Request:
+```json
+{"type":"SET","msg":19,"args":{"sts_period_ms":0}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":19,"ts":"20260501 10:30:00","args":{"sts_period_ms":0}}
+```
+
+Notes:
+- a value of `0` disables periodic `STS` transmission
+
+---
+
+### 6. Valid JSON object without trailing newline
 
 Request:
 ```json
@@ -87,7 +127,126 @@ Notes:
 
 ---
 
-### 5. Valid JSON preceded or followed by non-JSON noise bytes
+### 7. Valid `SET dbg config`
+
+Request:
+```json
+{"type":"SET","msg":21,"args":{"dbg_period_ms":100,"dbg_signals":["adc.ltc3901_me.raw","adc.ltc3901_me.mv","pwm.me.freq_hz","pwm.me.duty_pct"]}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":21,"ts":"20260501 10:30:00","args":{"dbg_period_ms":100,"dbg_signals":["adc.ltc3901_me.raw","adc.ltc3901_me.mv","pwm.me.freq_hz","pwm.me.duty_pct"]}}
+```
+
+Notes:
+- this enables periodic `DBG` output at 10 Hz
+- selected signals are emitted in the requested order after duplicate removal
+
+---
+
+### 8. Valid `GET dbg config`
+
+Request:
+```json
+{"type":"GET","msg":22,"args":{"dbg_period_ms":true}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":22,"ts":"20260501 10:30:00","args":{"dbg_period_ms":100,"dbg_signals":["adc.ltc3901_me.raw","adc.ltc3901_me.mv","pwm.me.freq_hz","pwm.me.duty_pct"]}}
+```
+
+Notes:
+- `GET` returns both `dbg_period_ms` and `dbg_signals` even if only one selector key is present
+- `args.dbg_signals:true` is also accepted as the selector
+
+---
+
+### 9. Valid `GET dbg signal sample`
+
+Request:
+```json
+{"type":"GET","msg":23,"args":{"dbg_signals":["adc.vupstream.raw","adc.vupstream.eng"]}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":23,"ts":"20260501 10:30:00","args":{"dbg_signals":{"adc.vupstream.raw":2048,"adc.vupstream.eng":5120}}}
+```
+
+Notes:
+- this is a one-shot sampled read, not a subscription change
+- invalid requested signals are returned as `null`
+- this does not modify the periodic `DBG` publisher configuration
+
+---
+
+### 10. Valid `SET adc_cal`
+
+Request:
+```json
+{"type":"SET","msg":23,"args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":-100,"valid":true}}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":23,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":-100,"valid":true}}}
+```
+
+Notes:
+- this configures the engineering-unit conversion for ADC channel `3`
+- conversion is `y = ((slope_scaled * raw_counts) / 1000000) + offset`
+
+---
+
+### 11. Valid `GET adc_cal`
+
+Request:
+```json
+{"type":"GET","msg":24,"args":{"adc_cal":3}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":-100,"valid":true}}}
+```
+
+---
+
+### 12. Valid `SET adc_cal` with channel name
+
+Request:
+```json
+{"type":"SET","msg":25,"args":{"adc_cal":{"channel":"vupstream","slope_scaled":2500,"offset":-100,"valid":true}}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":25,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":0,"slope_scaled":2500,"offset":-100,"valid":true}}}
+```
+
+Notes:
+- channel names are accepted as an alternative to numeric ADC channel indices
+- the response continues to report the resolved numeric channel index
+
+---
+
+### 13. Valid `GET adc_cal` with channel name
+
+Request:
+```json
+{"type":"GET","msg":26,"args":{"adc_cal":"vupstream"}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":26,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":0,"slope_scaled":2500,"offset":-100,"valid":true}}}
+```
+
+---
+
+### 14. Valid JSON preceded or followed by non-JSON noise bytes
 
 Example input stream:
 ```text
@@ -128,7 +287,7 @@ Notes:
 
 These are valid JSON syntactically, but should produce an error response because they are unsupported or invalid for the current implementation.
 
-### 6. Unsupported packet type `EXC`
+### 15. Unsupported packet type `EXC`
 
 Request:
 ```json
@@ -146,7 +305,7 @@ Notes:
 
 ---
 
-### 7. Missing `args.date_time` in `SET`
+### 16. Missing supported field in `SET`
 
 Request:
 ```json
@@ -155,12 +314,12 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports only args.date_time"}}
+{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, or adc_cal"}}
 ```
 
 ---
 
-### 8. `args.date_time` wrong format in `SET`
+### 17. `args.date_time` wrong format in `SET`
 
 Request:
 ```json
@@ -178,7 +337,7 @@ Notes:
 
 ---
 
-### 9. Invalid calendar/time value in `SET`
+### 18. Invalid calendar/time value in `SET`
 
 Request:
 ```json
@@ -192,7 +351,21 @@ Expected response could / should be:
 
 ---
 
-### 10. `GET` missing `args`
+### 19. Invalid `args.sts_period_ms` type in `SET`
+
+Request:
+```json
+{"type":"SET","msg":20,"args":{"sts_period_ms":true}}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"msg":20,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"args.sts_period_ms must be a non-negative integer"}}
+```
+
+---
+
+### 20. `GET` missing `args`
 
 Request:
 ```json
@@ -206,7 +379,7 @@ Expected response could / should be:
 
 ---
 
-### 11. `GET` missing `args.date_time`
+### 21. `GET` missing supported field
 
 Request:
 ```json
@@ -215,12 +388,68 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports only args.date_time"}}
+{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports args.date_time, args.raw_adc, dbg_period_ms, dbg_signals, or adc_cal"}}
 ```
 
 ---
 
-### 12. `GET args.date_time` not `true`
+### 22. Invalid `SET dbg_period_ms`
+
+Request:
+```json
+{"type":"SET","msg":23,"args":{"dbg_period_ms":50}}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"msg":23,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"args.dbg_period_ms must be 0 or 100..60000, and args.dbg_signals must be a valid signal array"}}
+```
+
+---
+
+### 23. Invalid `SET dbg_signals`
+
+Request:
+```json
+{"type":"SET","msg":24,"args":{"dbg_signals":["pwm.me.freq_hz","not.a.real.signal"]}}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"msg":24,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"args.dbg_period_ms must be 0 or 100..60000, and args.dbg_signals must be a valid signal array"}}
+```
+
+---
+
+### 24. Invalid `SET adc_cal`
+
+Request:
+```json
+{"type":"SET","msg":25,"args":{"adc_cal":{"channel":99,"slope_scaled":2500,"offset":0,"valid":true}}}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"msg":25,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"args.adc_cal.channel is out of range"}}
+```
+
+---
+
+### 25. Invalid `GET dbg_signals`
+
+Request:
+```json
+{"type":"GET","msg":26,"args":{"dbg_signals":["adc.vupstream.raw","not.a.real.signal"]}}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"msg":26,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"GET args.dbg_period_ms must be true, and args.dbg_signals must be true or a valid signal array"}}
+```
+
+---
+
+### 26. `GET args.date_time` not `true`
 
 Request:
 ```json
@@ -234,7 +463,7 @@ Expected response could / should be:
 
 ---
 
-### 13. Non-numeric `msg`
+### 27. Non-numeric `msg`
 
 Request:
 ```json
@@ -255,7 +484,7 @@ Notes:
 
 These inputs should be used to validate JSON framing, malformed-object handling, and parser robustness.
 
-### 14. Missing closing brace
+### 28. Missing closing brace
 
 Request:
 ```json
@@ -271,7 +500,7 @@ Notes:
 
 ---
 
-### 15. Extra closing brace
+### 29. Extra closing brace
 
 Request:
 ```json
@@ -289,7 +518,7 @@ Expected first response:
 
 ---
 
-### 16. Unquoted key
+### 30. Unquoted key
 
 Request:
 ```json
@@ -303,7 +532,7 @@ Expected response could / should be:
 
 ---
 
-### 17. Unterminated string
+### 31. Unterminated string
 
 Request:
 ```json
@@ -319,7 +548,7 @@ Notes:
 
 ---
 
-### 18. Top-level array instead of object
+### 32. Top-level array instead of object
 
 Request:
 ```json
@@ -341,7 +570,7 @@ Notes:
 
 ---
 
-### 19. Oversized JSON object
+### 33. Oversized JSON object
 
 Request:
 ```json
@@ -360,7 +589,7 @@ Notes:
 
 ## Back-to-back object examples
 
-### 20. Two valid objects in one input stream
+### 34. Two valid objects in one input stream
 
 Input stream:
 ```text

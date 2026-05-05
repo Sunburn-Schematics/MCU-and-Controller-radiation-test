@@ -8,7 +8,14 @@ Initial vertical slice only:
 - parse TE `SET` packet
 - validate numeric `msg`
 - validate `args.date_time`
+- validate `args.sts_period_ms`
+- validate `args.dbg_period_ms`
+- validate `args.dbg_signals`
+- validate `args.adc_cal`
 - store current HC date/time value
+- store periodic `STS` interval in milliseconds
+- store periodic `DBG` interval and selected debug signal subset
+- store per-channel ADC engineering-unit calibration factors
 - build `RSP` success or error packet
 
 ## Planned files
@@ -24,12 +31,32 @@ Initial vertical slice only:
 
 ## Current integration status
 
-These files are scaffolding only.
-They are not yet wired into the rest of the firmware build or runtime path.
-Integration into USB RX/TX and the application loop will be done later in controlled steps.
+These files are integrated into the USB RX/TX path and application loop for the currently supported `SET`/`GET` fields.
 
 ## Test Commands
 ```jsonl
 {"type":"SET","msg":0,"args":{"date_time":"20260501 14:57:09"}}
+{"type":"SET","msg":1,"args":{"sts_period_ms":250}}
+{"type":"SET","msg":2,"args":{"sts_period_ms":0}}
+{"type":"SET","msg":3,"args":{"dbg_period_ms":100,"dbg_signals":["adc.ltc3901_me.raw","adc.ltc3901_me.mv","pwm.me.freq_hz","pwm.me.duty_pct"]}}
+{"type":"GET","msg":4,"args":{"dbg_period_ms":true}}
+{"type":"GET","msg":7,"args":{"dbg_signals":["adc.vupstream.raw","adc.vupstream.eng"]}}
+{"type":"SET","msg":5,"args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":0,"valid":true}}}
+{"type":"SET","msg":6,"args":{"adc_cal":{"channel":"vupstream","slope_scaled":2500,"offset":0,"valid":true}}}
+{"type":"GET","msg":7,"args":{"adc_cal":3}}
+{"type":"GET","msg":8,"args":{"adc_cal":"vupstream"}}
 {"type":"SET","msg":0,"args":{"date_time":"20260501 14:57:09","Something":"Does this work"}}
 ```
+
+## ADC Calibration Channel Names
+
+`adc_cal.channel` for `SET`, and `args.adc_cal` for `GET`, may be either a numeric ADC channel index or one of these names:
+
+- `vupstream`
+- `ltc3901_vcc`
+- `lt8316_vout`
+- `ltc3901_me`
+- `ltc3901_mf`
+- `lt8316_gate`
+- `temp`
+- `vrefint`

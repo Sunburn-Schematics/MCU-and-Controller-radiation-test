@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #define HC_CMD_HOST_CONTROLLER_ID       (1u)
-#define HC_CMD_MAX_LINE_LEN             (256u)
+#define HC_CMD_MAX_LINE_LEN             (512u)
 #define HC_CMD_MAX_TS_LEN               (18u)
 #define HC_CMD_MAX_DATE_TIME_LEN        (18u)
 #define HC_CMD_MAX_ERROR_CODE_LEN       (24u)

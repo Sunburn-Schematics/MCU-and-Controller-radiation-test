@@ -63,6 +63,7 @@ file(GLOB RING_BUFFER_SOURCES CONFIGURE_DEPENDS
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/fw_app.c
+    App/hc_debug_telemetry.c
     App/hc_app_status.c
     Bsp/bsp_board.c
 #    Drivers_Local/sync_drv.c

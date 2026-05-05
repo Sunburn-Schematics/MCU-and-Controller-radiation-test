@@ -187,7 +187,7 @@ Responsibilities:
 
 - trigger or retrieve ADC conversions
 - provide stable channel enumeration
-- return raw counts and later fixed electrical conversions where appropriate
+- return raw counts, nominal millivolts, and optional per-channel engineering-unit conversion using `y = mx + c`
 
 #### `pwm_capture_drv.*`
 Owns timer-based measurement for:
@@ -202,6 +202,15 @@ Responsibilities:
 - pulse-width measurement
 - duty-cycle derivation
 - hiding timer channel and capture math details
+
+Current implementation notes:
+
+- acquisition runs as repeated per-signal bursts once started and continues until aborted
+- each signal owns its own DMA channels, timeout, buffers, processing, invalidation, and re-arm path
+- each burst captures up to 16 timestamps per active edge stream and processes the burst offline using the number of samples actually captured
+- `LTC3901_ME_Tmr` uses `TIM4_CH1` rising-edge DMA plus paired `TIM4_CH2` falling-edge DMA
+- `LTC3901_MF_Tmr` uses `TIM2_CH1` rising-edge DMA plus paired `TIM2_CH2` falling-edge DMA
+- `LT8316_Gate_Tmr` currently uses `TIM4_CH3` rising-edge DMA only, so frequency is reported while duty-cycle capture remains deferred
 
 #### `sync_drv.*`
 Owns synchronized output generation for:
@@ -262,3 +271,27 @@ Near-term architecture direction is:
 - add `Drivers_Local/pwm_capture_drv.*`
 - add `Drivers_Local/sync_drv.*`
 - add Services only after the local hardware driver contracts are stable enough to support logging, CLI, telemetry, and fault management
+
+## Current ADC implementation status
+
+The current `Drivers_Local/adc_sense_drv.*` implementation:
+
+- start ADC1 regular conversions using DMA
+- retain the latest full 8-channel sample frame
+- expose stable channel enumeration for the configured ADC input order
+- provide raw sample access and nominal pin-level millivolt conversion
+- support per-channel engineering-unit conversion from raw counts using configurable `SlopeScaled` and `Offset` factors
+
+Engineering-unit conversion details:
+
+- conversion uses `engineering = ((SlopeScaled * raw_counts) / ADC_SENSE_CALIBRATION_SLOPE_SCALE) + Offset`
+- each ADC channel owns an independent calibration entry
+- `Valid = false` disables engineering-unit output for that channel
+- calibration storage is currently RAM-only
+
+Not yet implemented in this driver:
+
+- calibrated VDDA compensation using VREFINT
+- fault thresholds or policy decisions
+- timer-derived frequency or duty-cycle measurements
+- non-volatile storage for calibration factors

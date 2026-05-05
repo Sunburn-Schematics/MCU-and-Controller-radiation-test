@@ -1,5 +1,6 @@
 #include "command_processor.h"
 
+#include "hc_cmd_types.h"
 #include "hc_jsonl_cmd.h"
 #include "usb_vcp_drv.h"
 
@@ -8,7 +9,7 @@
 #include <stdint.h>
 
 #define COMMAND_PROCESSOR_RX_CHUNK_SIZE        (64u)
-#define COMMAND_PROCESSOR_MESSAGE_BUFFER_SIZE  (256u)
+#define COMMAND_PROCESSOR_MESSAGE_BUFFER_SIZE  (HC_CMD_MAX_LINE_LEN)
 
 typedef struct
 {
