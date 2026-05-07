@@ -54,13 +54,10 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LED_Blue_GPIO_Port, LED_Blue_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LED_Green_Pin|LED_Red_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, LED_Green_Pin|LED_Red_Pin|nLTC3901_Pwr_Enable_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(nLTC3901_Pwr_Enable_GPIO_Port, nLTC3901_Pwr_Enable_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LT8316_HV_Pwr_Enable_GPIO_Port, LT8316_HV_Pwr_Enable_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LT8316_HV_Pwr_Enable_GPIO_Port, LT8316_HV_Pwr_Enable_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : LED_Blue_Pin */
   GPIO_InitStruct.Pin = LED_Blue_Pin;

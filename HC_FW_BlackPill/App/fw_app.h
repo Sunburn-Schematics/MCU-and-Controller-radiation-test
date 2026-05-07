@@ -24,6 +24,15 @@ bool fw_app_debug_format_signals_json(const uint8_t *signal_ids,
                                       uint8_t signal_count,
                                       char *buffer,
                                       size_t buffer_size);
+bool fw_app_debug_signal_is_digital(uint8_t signal_id);
+bool fw_app_set_digital_signal(uint8_t signal_id, bool value);
+bool fw_app_debug_format_digital_signals_json(const uint8_t *signal_ids,
+                                              const bool *values,
+                                              uint8_t signal_count,
+                                              char *buffer,
+                                              size_t buffer_size);
+bool fw_app_set_sync_enable(bool enable);
+bool fw_app_get_sync_enable(void);
 
 #ifdef __cplusplus
 }

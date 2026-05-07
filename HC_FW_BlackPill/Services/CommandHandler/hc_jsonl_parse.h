@@ -52,6 +52,13 @@ typedef struct
     uint32_t Channel;
 } hc_jsonl_get_adc_cal_request_t;
 
+typedef struct
+{
+    uint8_t SignalCount;
+    uint8_t SignalIds[HC_DEBUG_TELEMETRY_MAX_SIGNALS];
+    bool Values[HC_DEBUG_TELEMETRY_MAX_SIGNALS];
+} hc_jsonl_set_digital_signals_request_t;
+
 hc_cmd_status_t hc_jsonl_parse_request(const char *line,
                                        jsmntok_t *tokens,
                                        size_t max_tokens,
@@ -96,6 +103,11 @@ hc_cmd_status_t hc_jsonl_parse_get_adc_calibration(const char *line,
                                                    const jsmntok_t *tokens,
                                                    const hc_cmd_request_t *request,
                                                    hc_jsonl_get_adc_cal_request_t *adc_cal_request_out);
+
+hc_cmd_status_t hc_jsonl_parse_set_digital_signals(const char *line,
+                                                   const jsmntok_t *tokens,
+                                                   const hc_cmd_request_t *request,
+                                                   hc_jsonl_set_digital_signals_request_t *digital_signals_request_out);
 
 #ifdef __cplusplus
 }

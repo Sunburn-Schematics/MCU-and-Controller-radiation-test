@@ -4,6 +4,7 @@ This document defines the currently supported `dbg_signals` names for:
 
 - periodic `DBG` streaming via `SET {"dbg_period_ms":...,"dbg_signals":[...]}`
 - one-shot sampled reads via `GET {"dbg_signals":[...]}`
+- digital signal control via `SET {"dbg_signals":{"signal_name":boolean_value}}`
 
 ## Behavior
 
@@ -12,6 +13,7 @@ This document defines the currently supported `dbg_signals` names for:
 - Requested signals are returned in the same order they were requested after duplicate removal.
 - Unavailable values are emitted as `null`.
 - ADC `.eng` values depend on per-channel `adc_cal` configuration.
+- Only settable digital signals can be controlled via `SET {"dbg_signals":{...}}`; attempting to set read-only signals will result in an error.
 
 ## Types
 
@@ -77,10 +79,10 @@ JSON Example:
 
 ### ADC Channel 3: `LTC3901_ME_Anlg`
 
-| Signal | Type | Units | Source |
-| --- | --- | --- | --- |
-| `adc.ltc3901_me.raw` | `int` | counts | raw ADC sample for channel `3` |
-| `adc.ltc3901_me.mv` | `int` | mV | nominal pin-level millivolts |
+| Signal               | Type  | Units        | Source                              |
+| -------------------- | ----- | ------------ | ----------------------------------- |
+| `adc.ltc3901_me.raw` | `int` | counts       | raw ADC sample for channel `3`      |
+| `adc.ltc3901_me.mv`  | `int` | mV           | nominal pin-level millivolts        |
 | `adc.ltc3901_me.eng` | `int` | user-defined | `y = mx + c` engineering conversion |
 
 JSON Example:
@@ -167,13 +169,13 @@ JSON Example:
 
 ## PWM Signals
 
-| Signal | Type | Units | Source |
-| --- | --- | --- | --- |
-| `pwm.me.freq_hz` | `int` | Hz | `LTC3901_ME_Tmr` frequency |
-| `pwm.me.duty_pct` | `int` | % | `LTC3901_ME_Tmr` duty cycle |
-| `pwm.mf.freq_hz` | `int` | Hz | `LTC3901_MF_Tmr` frequency |
-| `pwm.mf.duty_pct` | `int` | % | `LTC3901_MF_Tmr` duty cycle |
-| `pwm.gate.freq_hz` | `int` | Hz | `LT8316_Gate_Tmr` frequency |
+| Signal             | Type  | Units | Source                      |
+| ------------------ | ----- | ----- | --------------------------- |
+| `pwm.me.freq_hz`   | `int` | Hz    | `LTC3901_ME_Tmr` frequency  |
+| `pwm.me.duty_pct`  | `int` | %     | `LTC3901_ME_Tmr` duty cycle |
+| `pwm.mf.freq_hz`   | `int` | Hz    | `LTC3901_MF_Tmr` frequency  |
+| `pwm.mf.duty_pct`  | `int` | %     | `LTC3901_MF_Tmr` duty cycle |
+| `pwm.gate.freq_hz` | `int` | Hz    | `LT8316_Gate_Tmr` frequency |
 
 JSON Example:
 
@@ -192,24 +194,37 @@ Notes:
 
 ## Digital / State Signals
 
-| Signal | Type | Units | Source |
-| --- | --- | --- | --- |
-| `beam_on` | `bool` | n/a | board BeamOn digital input |
-| `ltc3901.pwr_en` | `bool` | n/a | LTC3901 power-enable state |
-| `lt8316.pwr_en` | `bool` | n/a | LT8316 power-enable state |
-| `hc.state` | `string` | n/a | top-level HC state |
-| `ltc3901.state` | `string` | n/a | LTC3901 DUT state |
-| `lt8316.state` | `string` | n/a | LT8316 DUT state |
+| Signal           | Type     | Units | Settable | Source                     |
+| ---------------- | -------- | ----- | -------- | -------------------------- |
+| `beam_on`        | `bool`   | n/a   | No       | board BeamOn digital input |
+| `ltc3901.pwr_en` | `bool`   | n/a   | Yes      | LTC3901 power-enable state |
+| `lt8316.pwr_en`  | `bool`   | n/a   | Yes      | LT8316 power-enable state  |
+| `led.blue`       | `bool`   | n/a   | Yes      | Blue LED state             |
+| `led.red`        | `bool`   | n/a   | Yes      | Red LED state              |
+| `led.green`      | `bool`   | n/a   | Yes      | Green LED state            |
+| `sync.enable`    | `bool`   | n/a   | Yes      | SYNC output enable state   |
+| `hc.state`       | `string` | n/a   | No       | top-level HC state         |
+| `ltc3901.state`  | `string` | n/a   | No       | LTC3901 DUT state          |
+| `lt8316.state`   | `string` | n/a   | No       | LT8316 DUT state           |
 
 JSON Example:
 
 ```json
-{"type":"GET","msg":220,"args":{"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","hc.state","ltc3901.state","lt8316.state"]}}
+{"type":"GET","msg":220,"args":{"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","led.blue","led.red","led.green","sync.enable","hc.state","ltc3901.state","lt8316.state"]}}
 ```
 
 ```json
-{"type":"SET","msg":221,"args":{"dbg_period_ms":100,"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","hc.state","ltc3901.state","lt8316.state"]}}
+{"type":"SET","msg":221,"args":{"dbg_period_ms":100,"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","led.blue","led.red","led.green","sync.enable","hc.state","ltc3901.state","lt8316.state"]}}
 ```
+
+```json
+{"type":"SET","msg":222,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true,"sync.enable":true}}}
+```
+
+Notes:
+
+- Settable digital signals (`ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`, `sync.enable`) can be controlled using `SET` with `dbg_signals` as an object containing signal-value pairs.
+- Read-only signals (`beam_on`, `hc.state`, etc.) cannot be set and will return an error if attempted.
 
 ## Calibration Notes
 
@@ -235,6 +250,35 @@ Enable Debug
 
 ```json
 {"type":"SET","msg":18,"args":{"sts_period_ms":0}}
+
 {"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.raw","adc.vupstream.mv","adc.vupstream.eng"]}}
+
 {"type":"GET","msg":1,"args":{"dbg_period_ms":true,"dbg_signals":true}}
+
+{"type":"SET","msg":222,"args":{"dbg_signals":{"led.red":true}}}
+
+{"type":"SET","msg":222,"args":{"dbg_signals":{"ltc3901.pwr_en":true}}}
 ```
+
+
+### Turn on LTC3901 after Bootup
+Explanation:
+1. Disable Periodic Status Messages
+2. Enable periodic Debug Messages to display key LTC3901 values.
+3. Enable power to the LTC3901
+4. Enable the Sync Signal to the LTC3901
+```json
+{"type":"SET","msg":18,"args":{"sts_period_ms":0}}
+{"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.mv","ltc3901.pwr_en","adc.ltc3901_vcc.mv","pwm.me.freq_hz","adc.ltc3901_me.mv"]}}
+
+{"type":"SET","msg":124,"args":{"dbg_signals":{"ltc3901.pwr_en":true}}}{"type":"SET","msg":124,"args":{"dbg_signals":{"sync.enable":true}}}
+
+{"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.raw","adc.ltc3901_vcc.raw","adc.lt8316_vout.raw","adc.ltc3901_me.raw","adc.ltc3901_mf.raw"]}}
+
+```
+`vupstream`
+  - `ltc3901_vcc`
+  - `lt8316_vout`
+  - `ltc3901_me`
+  - `ltc3901_mf`
+  - `lt8316_gate`

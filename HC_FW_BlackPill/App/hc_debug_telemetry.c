@@ -6,6 +6,9 @@
 #include "hc_comms_tx.h"
 #include "hc_cmd_types.h"
 #include "hc_datetime.h"
+#include "bsp_board.h"
+#include "main.h"
+#include "fw_app.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -389,6 +392,42 @@ static bool hc_debug_telemetry_get_lt8316_state(hc_debug_value_t *value_out)
     return hc_debug_telemetry_get_status_string(hc_dut_state_to_string(s_active_status->Lt8316.State), value_out);
 }
 
+static bool hc_debug_telemetry_get_led_blue(hc_debug_value_t *value_out)
+{
+    // For LEDs, we can read the current GPIO output state
+    // Since LEDs are outputs, we need to check if they're on or off
+    // bsp_led_write sets the GPIO, so we can read it back
+    // But since we don't have a direct way, let's assume we track state or read GPIO
+    // For simplicity, let's use a static variable or read the GPIO pin
+    
+    // Actually, let's read the GPIO output register
+    GPIO_PinState pin_state = HAL_GPIO_ReadPin(LED_Blue_GPIO_Port, LED_Blue_Pin);
+    // Blue LED is active-low, so invert the logic
+    bool is_on = (pin_state == GPIO_PIN_RESET);
+    return hc_debug_telemetry_get_status_bool(is_on, value_out);
+}
+
+static bool hc_debug_telemetry_get_led_red(hc_debug_value_t *value_out)
+{
+    GPIO_PinState pin_state = HAL_GPIO_ReadPin(LED_Red_GPIO_Port, LED_Red_Pin);
+    // Red LED is active-high
+    bool is_on = (pin_state == GPIO_PIN_SET);
+    return hc_debug_telemetry_get_status_bool(is_on, value_out);
+}
+
+static bool hc_debug_telemetry_get_led_green(hc_debug_value_t *value_out)
+{
+    GPIO_PinState pin_state = HAL_GPIO_ReadPin(LED_Green_GPIO_Port, LED_Green_Pin);
+    // Green LED is active-high
+    bool is_on = (pin_state == GPIO_PIN_SET);
+    return hc_debug_telemetry_get_status_bool(is_on, value_out);
+}
+
+static bool hc_debug_telemetry_get_sync_enable(hc_debug_value_t *value_out)
+{
+    return hc_debug_telemetry_get_status_bool(fw_app_get_sync_enable(), value_out);
+}
+
 static const hc_debug_signal_def_t s_signal_catalog[] = {
     { "adc.vupstream.raw",     hc_debug_telemetry_get_adc_vupstream_raw },
     { "adc.vupstream.mv",      hc_debug_telemetry_get_adc_vupstream_mv },
@@ -422,6 +461,10 @@ static const hc_debug_signal_def_t s_signal_catalog[] = {
     { "beam_on",               hc_debug_telemetry_get_beam_on },
     { "ltc3901.pwr_en",        hc_debug_telemetry_get_ltc3901_pwr_en },
     { "lt8316.pwr_en",         hc_debug_telemetry_get_lt8316_pwr_en },
+    { "led.blue",              hc_debug_telemetry_get_led_blue },
+    { "led.red",               hc_debug_telemetry_get_led_red },
+    { "led.green",             hc_debug_telemetry_get_led_green },
+    { "sync.enable",           hc_debug_telemetry_get_sync_enable },
     { "hc.state",              hc_debug_telemetry_get_hc_state },
     { "ltc3901.state",         hc_debug_telemetry_get_ltc3901_state },
     { "lt8316.state",          hc_debug_telemetry_get_lt8316_state },

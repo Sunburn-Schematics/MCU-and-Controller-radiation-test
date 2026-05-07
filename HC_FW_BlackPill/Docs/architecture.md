@@ -276,11 +276,13 @@ Near-term architecture direction is:
 
 The current `Drivers_Local/adc_sense_drv.*` implementation:
 
-- start ADC1 regular conversions using DMA
+- starts and rearms ADC1 regular conversions using DMA from the superloop
 - retain the latest full 8-channel sample frame
 - expose stable channel enumeration for the configured ADC input order
 - provide raw sample access and nominal pin-level millivolt conversion
 - support per-channel engineering-unit conversion from raw counts using configurable `SlopeScaled` and `Offset` factors
+
+ADC acquisition uses CubeMX's normal-mode DMA configuration. `adc_sense_drv_init()` starts the first 8-channel frame. The DMA completion callback only marks the frame valid and requests a rearm; `adc_sense_drv_task()` performs the stop/restart work from `fw_app_run()` so ADC rearming is not done inside the DMA ISR.
 
 Engineering-unit conversion details:
 

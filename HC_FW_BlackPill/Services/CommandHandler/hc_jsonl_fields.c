@@ -377,18 +377,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
             return HC_CMD_ERR_BAD_VALUE;
 
         case HC_CMD_ERR_BAD_FIELD:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_FIELD",
-                                          "SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, or adc_cal"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_FIELD;
+            break;
 
         default:
             if (!hc_jsonl_rsp_build_error(rsp_buf,
@@ -471,18 +460,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
             return HC_CMD_ERR_BAD_VALUE;
 
         case HC_CMD_ERR_BAD_FIELD:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_FIELD",
-                                          "SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, or adc_cal"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_FIELD;
+            break;
 
         default:
             if (!hc_jsonl_rsp_build_error(rsp_buf,
@@ -498,6 +476,129 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
             }
             return HC_CMD_ERR_INTERNAL;
     }
+
+    hc_jsonl_set_digital_signals_request_t digital_signals_request;
+    switch (hc_jsonl_parse_set_digital_signals(line, tokens, request, &digital_signals_request))
+    {
+        case HC_CMD_OK:
+            // Apply the digital signal settings
+            for (uint8_t i = 0; i < digital_signals_request.SignalCount; ++i)
+            {
+                uint8_t signal_id = digital_signals_request.SignalIds[i];
+                bool value = digital_signals_request.Values[i];
+
+                // Map signal IDs to BSP functions
+                if (fw_app_debug_signal_is_digital(signal_id))
+                {
+                    if (!fw_app_set_digital_signal(signal_id, value))
+                    {
+                        if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                                      rsp_buf_size,
+                                                      HC_CMD_HOST_CONTROLLER_ID,
+                                                      request->has_msg,
+                                                      request->msg,
+                                                      hc_datetime_get(),
+                                                      "BAD_VALUE",
+                                                      "Failed to set digital signal"))
+                        {
+                            return HC_CMD_ERR_INTERNAL;
+                        }
+                        return HC_CMD_ERR_BAD_VALUE;
+                    }
+                }
+                else
+                {
+                    if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                                  rsp_buf_size,
+                                                  HC_CMD_HOST_CONTROLLER_ID,
+                                                  request->has_msg,
+                                                  request->msg,
+                                                  hc_datetime_get(),
+                                                  "BAD_VALUE",
+                                                  "Signal is not a settable digital signal"))
+                    {
+                        return HC_CMD_ERR_INTERNAL;
+                    }
+                    return HC_CMD_ERR_BAD_VALUE;
+                }
+            }
+
+            // Build response - need to format the signals back
+            char signals_json[HC_JSONL_DBG_SIGNALS_JSON_MAX_LEN];
+            if (!fw_app_debug_format_digital_signals_json(digital_signals_request.SignalIds,
+                                                          digital_signals_request.Values,
+                                                          digital_signals_request.SignalCount,
+                                                          signals_json,
+                                                          sizeof(signals_json)) ||
+                !hc_jsonl_rsp_build_set_digital_signals_ok(rsp_buf,
+                                                           rsp_buf_size,
+                                                           HC_CMD_HOST_CONTROLLER_ID,
+                                                           request->msg,
+                                                           hc_datetime_get(),
+                                                           signals_json))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+            return HC_CMD_OK;
+
+        case HC_CMD_ERR_BAD_ARGS:
+            if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                          rsp_buf_size,
+                                          HC_CMD_HOST_CONTROLLER_ID,
+                                          request->has_msg,
+                                          request->msg,
+                                          hc_datetime_get(),
+                                          "BAD_ARGS",
+                                          "SET requires an args object"))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+            return HC_CMD_ERR_BAD_ARGS;
+
+        case HC_CMD_ERR_BAD_VALUE:
+            if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                          rsp_buf_size,
+                                          HC_CMD_HOST_CONTROLLER_ID,
+                                          request->has_msg,
+                                          request->msg,
+                                          hc_datetime_get(),
+                                          "BAD_VALUE",
+                                          "args.dbg_signals must be an object with boolean values for settable digital signals"))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+            return HC_CMD_ERR_BAD_VALUE;
+
+        case HC_CMD_ERR_BAD_FIELD:
+            break;
+
+        default:
+            if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                          rsp_buf_size,
+                                          HC_CMD_HOST_CONTROLLER_ID,
+                                          request->has_msg,
+                                          request->msg,
+                                          hc_datetime_get(),
+                                          "INTERNAL",
+                                          "SET parsing failed"))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+            return HC_CMD_ERR_INTERNAL;
+    }
+
+    if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                  rsp_buf_size,
+                                  HC_CMD_HOST_CONTROLLER_ID,
+                                  request->has_msg,
+                                  request->msg,
+                                  hc_datetime_get(),
+                                  "BAD_FIELD",
+                                  "SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, or adc_cal"))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+    return HC_CMD_ERR_BAD_FIELD;
 }
 
 hc_cmd_status_t hc_jsonl_handle_get(const char *line,

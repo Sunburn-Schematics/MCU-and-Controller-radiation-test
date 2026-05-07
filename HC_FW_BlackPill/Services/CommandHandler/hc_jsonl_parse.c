@@ -505,55 +505,54 @@ hc_cmd_status_t hc_jsonl_parse_set_debug_config(const char *line,
     dbg_signals_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "dbg_signals");
     if (dbg_signals_index >= 0)
     {
-        int i;
-
-        if (tokens[dbg_signals_index].type != JSMN_ARRAY)
+        if (tokens[dbg_signals_index].type == JSMN_ARRAY)
         {
-            return HC_CMD_ERR_BAD_VALUE;
-        }
+            int i;
 
-        if (tokens[dbg_signals_index].size > (int)HC_DEBUG_TELEMETRY_MAX_SIGNALS)
-        {
-            return HC_CMD_ERR_BAD_VALUE;
-        }
-
-        debug_request_out->HasSignals = true;
-        for (i = 0; i < tokens[dbg_signals_index].size; ++i)
-        {
-            int element_index;
-            size_t name_len;
-            uint8_t signal_id;
-            bool duplicate_found;
-            uint8_t j;
-
-            element_index = dbg_signals_index + 1 + i;
-            if (!hc_jsonl_token_is_string(&tokens[element_index]))
+            if (tokens[dbg_signals_index].size > (int)HC_DEBUG_TELEMETRY_MAX_SIGNALS)
             {
                 return HC_CMD_ERR_BAD_VALUE;
             }
 
-            name_len = (size_t)(tokens[element_index].end - tokens[element_index].start);
-            if (!fw_app_debug_lookup_signal_id(&line[tokens[element_index].start], name_len, &signal_id))
+            debug_request_out->HasSignals = true;
+            for (i = 0; i < tokens[dbg_signals_index].size; ++i)
             {
-                return HC_CMD_ERR_BAD_VALUE;
-            }
+                int element_index;
+                size_t name_len;
+                uint8_t signal_id;
+                bool duplicate_found;
+                uint8_t j;
 
-            duplicate_found = false;
-            for (j = 0U; j < debug_request_out->SignalCount; ++j)
-            {
-                if (debug_request_out->SignalIds[j] == signal_id)
+                element_index = dbg_signals_index + 1 + i;
+                if (!hc_jsonl_token_is_string(&tokens[element_index]))
                 {
-                    duplicate_found = true;
-                    break;
+                    return HC_CMD_ERR_BAD_VALUE;
+                }
+
+                name_len = (size_t)(tokens[element_index].end - tokens[element_index].start);
+                if (!fw_app_debug_lookup_signal_id(&line[tokens[element_index].start], name_len, &signal_id))
+                {
+                    return HC_CMD_ERR_BAD_VALUE;
+                }
+
+                duplicate_found = false;
+                for (j = 0U; j < debug_request_out->SignalCount; ++j)
+                {
+                    if (debug_request_out->SignalIds[j] == signal_id)
+                    {
+                        duplicate_found = true;
+                        break;
+                    }
+                }
+
+                if (!duplicate_found)
+                {
+                    debug_request_out->SignalIds[debug_request_out->SignalCount] = signal_id;
+                    debug_request_out->SignalCount++;
                 }
             }
-
-            if (!duplicate_found)
-            {
-                debug_request_out->SignalIds[debug_request_out->SignalCount] = signal_id;
-                debug_request_out->SignalCount++;
-            }
         }
+        // If dbg_signals is not an array (e.g., object for digital signals), skip it
     }
 
     if (!debug_request_out->HasPeriodMs && !debug_request_out->HasSignals)
@@ -864,4 +863,105 @@ hc_cmd_status_t hc_jsonl_parse_get_adc_calibration(const char *line,
 
     adc_cal_request_out->Requested = true;
     return hc_jsonl_parse_adc_channel_selector(line, &tokens[adc_cal_index], &adc_cal_request_out->Channel);
+}
+
+hc_cmd_status_t hc_jsonl_parse_set_digital_signals(const char *line,
+                                                  const jsmntok_t *tokens,
+                                                  const hc_cmd_request_t *request,
+                                                  hc_jsonl_set_digital_signals_request_t *digital_signals_request_out)
+{
+    int args_index;
+    int dbg_signals_index;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL) || (digital_signals_request_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    memset(digital_signals_request_out, 0, sizeof(*digital_signals_request_out));
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    dbg_signals_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "dbg_signals");
+    if (dbg_signals_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (tokens[dbg_signals_index].type != JSMN_OBJECT)
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    if (tokens[dbg_signals_index].size > (int)HC_DEBUG_TELEMETRY_MAX_SIGNALS)
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    for (int i = 0; i < tokens[dbg_signals_index].size; ++i)
+    {
+        int key_index = dbg_signals_index + 1 + (i * 2);
+        int value_index = key_index + 1;
+
+        if (!hc_jsonl_token_is_string(&tokens[key_index]))
+        {
+            return HC_CMD_ERR_BAD_VALUE;
+        }
+
+        size_t name_len = (size_t)(tokens[key_index].end - tokens[key_index].start);
+        uint8_t signal_id;
+        if (!fw_app_debug_lookup_signal_id(&line[tokens[key_index].start], name_len, &signal_id))
+        {
+            return HC_CMD_ERR_BAD_VALUE;
+        }
+
+        if (!hc_jsonl_token_is_primitive(&tokens[value_index]))
+        {
+            return HC_CMD_ERR_BAD_VALUE;
+        }
+
+        bool value;
+        if (hc_jsonl_token_equals(line, &tokens[value_index], "true"))
+        {
+            value = true;
+        }
+        else if (hc_jsonl_token_equals(line, &tokens[value_index], "false"))
+        {
+            value = false;
+        }
+        else
+        {
+            return HC_CMD_ERR_BAD_VALUE;
+        }
+
+        // Check for duplicates
+        bool duplicate_found = false;
+        for (uint8_t j = 0; j < digital_signals_request_out->SignalCount; ++j)
+        {
+            if (digital_signals_request_out->SignalIds[j] == signal_id)
+            {
+                duplicate_found = true;
+                break;
+            }
+        }
+
+        if (!duplicate_found)
+        {
+            digital_signals_request_out->SignalIds[digital_signals_request_out->SignalCount] = signal_id;
+            digital_signals_request_out->Values[digital_signals_request_out->SignalCount] = value;
+            digital_signals_request_out->SignalCount++;
+        }
+    }
+
+    if (digital_signals_request_out->SignalCount == 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    return HC_CMD_OK;
 }

@@ -289,3 +289,28 @@ bool hc_jsonl_rsp_build_error(char *out,
 
     return ((written > 0) && ((size_t)written < out_size));
 }
+
+bool hc_jsonl_rsp_build_set_digital_signals_ok(char *out,
+                                               size_t out_size,
+                                               uint8_t hc_id,
+                                               uint32_t msg,
+                                               const char *ts,
+                                               const char *signals_json)
+{
+    int written;
+
+    if ((out == NULL) || (out_size == 0u) || (ts == NULL) || (signals_json == NULL))
+    {
+        return false;
+    }
+
+    written = snprintf(out,
+                       out_size,
+                       "{\"type\":\"RSP\",\"hc\":%lu,\"msg\":%lu,\"ts\":\"%s\",\"args\":{\"dbg_signals\":%s}}",
+                       (unsigned long)hc_id,
+                       (unsigned long)msg,
+                       ts,
+                       signals_json);
+
+    return ((written > 0) && ((size_t)written < out_size));
+}

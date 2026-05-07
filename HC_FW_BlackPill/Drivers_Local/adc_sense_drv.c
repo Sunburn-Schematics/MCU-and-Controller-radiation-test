@@ -18,7 +18,8 @@ typedef struct
 
 static uint16_t s_adc_samples[ADC_SENSE_CHANNEL_COUNT];
 static bool s_adc_sense_initialized;
-static bool s_adc_data_valid;
+static volatile bool s_adc_data_valid;
+static volatile bool s_adc_dma_rearm_pending;
 static adc_sense_calibration_entry_t s_adc_calibration[ADC_SENSE_CHANNEL_COUNT];
 
 static bool adc_sense_drv_is_valid_channel(adc_sense_channel_t channel)
@@ -70,19 +71,36 @@ static bool adc_sense_drv_apply_calibration(uint16_t raw_counts,
     return true;
 }
 
-void adc_sense_drv_init(void)
+static bool adc_sense_drv_start_dma(void)
 {
-    adc_sense_drv_load_default_calibration();
-
     if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)s_adc_samples, (uint32_t)ADC_SENSE_CHANNEL_COUNT) == HAL_OK)
     {
         s_adc_sense_initialized = true;
+        s_adc_dma_rearm_pending = false;
+        return true;
     }
-    else
+
+    s_adc_sense_initialized = false;
+    s_adc_data_valid = false;
+    s_adc_dma_rearm_pending = true;
+    return false;
+}
+
+void adc_sense_drv_init(void)
+{
+    adc_sense_drv_load_default_calibration();
+    (void)adc_sense_drv_start_dma();
+}
+
+void adc_sense_drv_task(void)
+{
+    if (!s_adc_dma_rearm_pending)
     {
-        s_adc_sense_initialized = false;
-        s_adc_data_valid = false;
+        return;
     }
+
+    (void)HAL_ADC_Stop_DMA(&hadc1);
+    (void)adc_sense_drv_start_dma();
 }
 
 bool adc_sense_drv_is_initialized(void)
@@ -170,6 +188,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc == &hadc1)
     {
         s_adc_data_valid = true;
+        s_adc_dma_rearm_pending = true;
     }
 }
 
@@ -178,5 +197,6 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
     if (hadc == &hadc1)
     {
         s_adc_data_valid = false;
+        s_adc_dma_rearm_pending = true;
     }
 }

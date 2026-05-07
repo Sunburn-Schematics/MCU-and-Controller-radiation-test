@@ -38,7 +38,12 @@ bool hc_jsonl_rsp_build_set_adc_cal_ok(char *out,
                                        int32_t slope_scaled,
                                        int32_t offset,
                                        bool valid);
-
+bool hc_jsonl_rsp_build_set_digital_signals_ok(char *out,
+                                               size_t out_size,
+                                               uint8_t hc_id,
+                                               uint32_t msg,
+                                               const char *ts,
+                                               const char *signals_json);
 bool hc_jsonl_rsp_build_get_datetime_ok(char *out,
                                         size_t out_size,
                                         uint32_t hc_id,

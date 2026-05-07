@@ -7,8 +7,8 @@ This document provides simple test vectors for the current first-slice HC comman
 Current implemented scope:
 - command processor frames one complete top-level JSON object from the USB byte stream
 - `CommandHandler` supports `SET` and `GET`
-- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, and `args.dbg_signals`
-- `SET` also supports `args.adc_cal`
+- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
+- `SET` also supports `args.dbg_signals` as an object for setting digital signal values (power enables and LEDs)
 - `GET` currently supports `args.date_time`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
 - timestamps use seconds-only format: `YYYYMMDD HH:MM:SS`
 - current temporary HC identifier in responses is `1`
@@ -197,6 +197,25 @@ Expected response:
 Notes:
 - this configures the engineering-unit conversion for ADC channel `3`
 - conversion is `y = ((slope_scaled * raw_counts) / 1000000) + offset`
+
+---
+
+### 11. Valid `SET digital signals`
+
+Request:
+```json
+{"type":"SET","msg":24,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true,"sync.enable":true}}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true,"sync.enable":true}}}
+```
+
+Notes:
+- this sets the LTC3901 power enable to ON, LT8316 power enable to OFF, controls the LED states, and enables SYNC output
+- settable digital signals include `ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`, and `sync.enable`
+- attempting to set other signals will result in an error
 
 ---
 

@@ -84,6 +84,7 @@ void fw_app_run(void)
         fw_app_send_periodic_status();
     }
 
+    adc_sense_drv_task();
     usb_vcp_drv_task();
     pwm_capture_drv_task();
     hc_debug_telemetry_task();
@@ -130,4 +131,149 @@ bool fw_app_debug_format_signals_json(const uint8_t *signal_ids,
                                       size_t buffer_size)
 {
     return hc_debug_telemetry_format_signals_json(signal_ids, signal_count, buffer, buffer_size);
+}
+
+bool fw_app_debug_signal_is_digital(uint8_t signal_id)
+{
+    const char *name = hc_debug_telemetry_get_signal_name(signal_id);
+    if (name == NULL)
+    {
+        return false;
+    }
+
+    // Check if it's one of the settable digital signals
+    return (strcmp(name, "ltc3901.pwr_en") == 0) ||
+           (strcmp(name, "lt8316.pwr_en") == 0) ||
+           (strcmp(name, "led.blue") == 0) ||
+           (strcmp(name, "led.red") == 0) ||
+           (strcmp(name, "led.green") == 0) ||
+           (strcmp(name, "sync.enable") == 0);
+}
+
+bool fw_app_set_digital_signal(uint8_t signal_id, bool value)
+{
+    const char *name = hc_debug_telemetry_get_signal_name(signal_id);
+    if (name == NULL)
+    {
+        return false;
+    }
+
+    if (strcmp(name, "ltc3901.pwr_en") == 0)
+    {
+        if (value)
+        {
+            bsp_power_enable(BSP_POWER_LTC3901);
+        }
+        else
+        {
+            bsp_power_disable(BSP_POWER_LTC3901);
+        }
+        return true;
+    }
+    else if (strcmp(name, "lt8316.pwr_en") == 0)
+    {
+        if (value)
+        {
+            bsp_power_enable(BSP_POWER_LT8316);
+        }
+        else
+        {
+            bsp_power_disable(BSP_POWER_LT8316);
+        }
+        return true;
+    }
+    else if (strcmp(name, "led.blue") == 0)
+    {
+        bsp_led_write(BSP_LED_BLUE, value);
+        return true;
+    }
+    else if (strcmp(name, "led.red") == 0)
+    {
+        bsp_led_write(BSP_LED_RED, value);
+        return true;
+    }
+    else if (strcmp(name, "led.green") == 0)
+    {
+        bsp_led_write(BSP_LED_GREEN, value);
+        return true;
+    }
+    else if (strcmp(name, "sync.enable") == 0)
+    {
+        return fw_app_set_sync_enable(value);
+    }
+
+    return false;
+}
+
+bool fw_app_set_sync_enable(bool enable)
+{
+    if (enable)
+    {
+        return sync_drv_enable();
+    }
+    else
+    {
+        sync_drv_disable();
+        return true;
+    }
+}
+
+bool fw_app_get_sync_enable(void)
+{
+    return sync_drv_is_enabled();
+}
+
+bool fw_app_debug_format_digital_signals_json(const uint8_t *signal_ids,
+                                              const bool *values,
+                                              uint8_t signal_count,
+                                              char *buffer,
+                                              size_t buffer_size)
+{
+    size_t written = 0;
+    bool first = true;
+
+    if (buffer == NULL || buffer_size == 0)
+    {
+        return false;
+    }
+
+    written += snprintf(buffer + written, buffer_size - written, "{");
+    if (written >= buffer_size)
+    {
+        return false;
+    }
+
+    for (uint8_t i = 0; i < signal_count; ++i)
+    {
+        const char *name = hc_debug_telemetry_get_signal_name(signal_ids[i]);
+        if (name == NULL)
+        {
+            continue;
+        }
+
+        if (!first)
+        {
+            written += snprintf(buffer + written, buffer_size - written, ",");
+            if (written >= buffer_size)
+            {
+                return false;
+            }
+        }
+        first = false;
+
+        written += snprintf(buffer + written, buffer_size - written, "\"%s\":%s",
+                           name, values[i] ? "true" : "false");
+        if (written >= buffer_size)
+        {
+            return false;
+        }
+    }
+
+    written += snprintf(buffer + written, buffer_size - written, "}");
+    if (written >= buffer_size)
+    {
+        return false;
+    }
+
+    return true;
 }

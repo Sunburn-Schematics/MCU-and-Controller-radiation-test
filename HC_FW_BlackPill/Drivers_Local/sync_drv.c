@@ -30,6 +30,16 @@ static TIM_HandleTypeDef *hSyncTimer = &htim3;   /* Timer handle for the synchro
 static bool s_config_valid;
 static bool s_enabled;
 
+static void prv_stop_timer_base(void)
+{
+    /*
+     * HAL_TIM_Base_Start() leaves hSyncTimer->State BUSY.  Stop the base
+     * unconditionally so the HAL handle returns to READY even if OC_Stop()
+     * has already cleared CR1.CEN.
+     */
+    (void)HAL_TIM_Base_Stop(hSyncTimer);
+}
+
 #if 0
 static uint32_t prv_get_tim3_input_clock_hz(void)
 {
@@ -194,8 +204,15 @@ void sync_drv_init(void)
 
 void sync_drv_disable(void)
 {
-    (void)HAL_TIM_OC_Stop(hSyncTimer, TIM_CHANNEL_1);
-    (void)HAL_TIM_OC_Stop(hSyncTimer, TIM_CHANNEL_2);
+    if (hSyncTimer->Instance->CCER & TIM_CCER_CC1E)
+    {
+        (void)HAL_TIM_OC_Stop(hSyncTimer, TIM_CHANNEL_1);
+    }
+    if (hSyncTimer->Instance->CCER & TIM_CCER_CC2E)
+    {
+        (void)HAL_TIM_OC_Stop(hSyncTimer, TIM_CHANNEL_2);
+    }
+    prv_stop_timer_base();
     s_enabled = false;
 }
 
@@ -206,15 +223,42 @@ bool sync_drv_enable(void)
         return false;
     }
 
-    if (HAL_TIM_OC_Start(hSyncTimer, TIM_CHANNEL_1) != HAL_OK)
+    if (s_enabled)
     {
-        return false;
+        // Already enabled, nothing to do
+        return true;
     }
 
-    if (HAL_TIM_OC_Start(hSyncTimer, TIM_CHANNEL_2) != HAL_OK)
+    // Start the timer base if not already started
+    if (!(hSyncTimer->Instance->CR1 & TIM_CR1_CEN))
     {
-        (void)HAL_TIM_OC_Stop(hSyncTimer, TIM_CHANNEL_1);
-        return false;
+        if (HAL_TIM_Base_Start(hSyncTimer) != HAL_OK)
+        {
+            return false;
+        }
+    }
+
+    // Start OC channels if not already started
+    if (!(hSyncTimer->Instance->CCER & TIM_CCER_CC1E))
+    {
+        if (HAL_TIM_OC_Start(hSyncTimer, TIM_CHANNEL_1) != HAL_OK)
+        {
+            prv_stop_timer_base();
+            return false;
+        }
+    }
+
+    if (!(hSyncTimer->Instance->CCER & TIM_CCER_CC2E))
+    {
+        if (HAL_TIM_OC_Start(hSyncTimer, TIM_CHANNEL_2) != HAL_OK)
+        {
+            if (hSyncTimer->Instance->CCER & TIM_CCER_CC1E)
+            {
+                (void)HAL_TIM_OC_Stop(hSyncTimer, TIM_CHANNEL_1);
+            }
+            prv_stop_timer_base();
+            return false;
+        }
     }
 
     s_enabled = true;

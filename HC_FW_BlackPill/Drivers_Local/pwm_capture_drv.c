@@ -13,6 +13,12 @@
 #define PWM_CAPTURE_JOB_DONE_RISE      (1UL << 0)
 #define PWM_CAPTURE_JOB_DONE_FALL      (1UL << 1)
 
+extern DMA_HandleTypeDef hdma_tim2_ch1;
+extern DMA_HandleTypeDef hdma_tim2_ch2_ch4;
+extern DMA_HandleTypeDef hdma_tim4_ch1;
+extern DMA_HandleTypeDef hdma_tim4_ch2;
+extern DMA_HandleTypeDef hdma_tim4_ch3;
+
 typedef struct
 {
     pwm_capture_signal_t signal;
@@ -208,7 +214,7 @@ static DMA_HandleTypeDef *pwm_capture_drv_get_fall_dma(const pwm_capture_job_t *
         return &hdma_tim4_ch2;
 
     case PWM_CAPTURE_SIGNAL_LTC3901_MF:
-        return &hdma_tim2_ch2;
+        return &hdma_tim2_ch2_ch4;
 
     default:
         return NULL;

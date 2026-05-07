@@ -186,8 +186,8 @@
   "active": "79f6f1e3e6facd0e",
   "lastOpenFiles": [
     "JSON_Tests.md",
-    "pin_connections.md",
     "Debug_Signals.md",
+    "pin_connections.md",
     "Index.md",
     "requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md",
     "tc_hc_jsonl_command_structure_preliminary_v1.md",

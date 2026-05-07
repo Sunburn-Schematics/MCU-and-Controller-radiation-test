@@ -31,6 +31,7 @@ typedef struct
 #define ADC_SENSE_CALIBRATION_SLOPE_SCALE    (1000000L)
 
 void adc_sense_drv_init(void);
+void adc_sense_drv_task(void);
 bool adc_sense_drv_is_initialized(void);
 bool adc_sense_drv_is_data_valid(void);
 uint16_t adc_sense_drv_get_raw(adc_sense_channel_t channel);
