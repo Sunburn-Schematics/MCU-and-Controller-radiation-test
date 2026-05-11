@@ -29,6 +29,7 @@ typedef struct
     bool completed_once;
     uint32_t start_ms;
     pwm_capture_result_t result;
+    pwm_capture_diagnostics_t diagnostics;
 } pwm_capture_job_t;
 
 static uint16_t s_me_rising_ticks[PWM_CAPTURE_BURST_SAMPLES];
@@ -119,6 +120,7 @@ static void pwm_capture_drv_reset_jobs(void)
         s_jobs[job_index].completed_once = false;
         s_jobs[job_index].start_ms = 0U;
         pwm_capture_drv_reset_result(&s_jobs[job_index].result);
+        memset(&s_jobs[job_index].diagnostics, 0, sizeof(s_jobs[job_index].diagnostics));
     }
 }
 
@@ -710,6 +712,7 @@ static bool pwm_capture_drv_process_frequency_u16(const uint16_t *rising_ticks,
 static bool pwm_capture_drv_arm_job(pwm_capture_job_t *job)
 {
     bool success;
+    HAL_StatusTypeDef start_status;
 
     if (job == NULL)
     {
@@ -721,43 +724,63 @@ static bool pwm_capture_drv_arm_job(pwm_capture_job_t *job)
     job->dma_error = false;
     job->start_ms = HAL_GetTick();
     job->armed = true;
+    job->diagnostics.armed = true;
+    job->diagnostics.last_start_ok = false;
+    job->diagnostics.last_start_status = (uint32_t)HAL_ERROR;
     success = true;
 
     switch (job->signal)
     {
     case PWM_CAPTURE_SIGNAL_LTC3901_ME:
-        if (HAL_TIM_IC_Start_DMA(&htim4, TIM_CHANNEL_1, (uint32_t *)s_me_rising_ticks, PWM_CAPTURE_BURST_SAMPLES) != HAL_OK)
+        start_status = HAL_TIM_IC_Start_DMA(&htim4, TIM_CHANNEL_1, (uint32_t *)s_me_rising_ticks, PWM_CAPTURE_BURST_SAMPLES);
+        if (start_status != HAL_OK)
         {
             success = false;
         }
-        else if (HAL_TIM_IC_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)s_me_falling_ticks, PWM_CAPTURE_BURST_SAMPLES) != HAL_OK)
+        else
+        {
+            start_status = HAL_TIM_IC_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)s_me_falling_ticks, PWM_CAPTURE_BURST_SAMPLES);
+        }
+
+        if (start_status != HAL_OK)
         {
             success = false;
         }
         break;
 
     case PWM_CAPTURE_SIGNAL_LTC3901_MF:
-        if (HAL_TIM_IC_Start_DMA(&htim2, TIM_CHANNEL_1, s_mf_rising_ticks, PWM_CAPTURE_BURST_SAMPLES) != HAL_OK)
+        start_status = HAL_TIM_IC_Start_DMA(&htim2, TIM_CHANNEL_1, s_mf_rising_ticks, PWM_CAPTURE_BURST_SAMPLES);
+        if (start_status != HAL_OK)
         {
             success = false;
         }
-        else if (HAL_TIM_IC_Start_DMA(&htim2, TIM_CHANNEL_2, s_mf_falling_ticks, PWM_CAPTURE_BURST_SAMPLES) != HAL_OK)
+        else
+        {
+            start_status = HAL_TIM_IC_Start_DMA(&htim2, TIM_CHANNEL_2, s_mf_falling_ticks, PWM_CAPTURE_BURST_SAMPLES);
+        }
+
+        if (start_status != HAL_OK)
         {
             success = false;
         }
         break;
 
     case PWM_CAPTURE_SIGNAL_LT8316_GATE:
-        if (HAL_TIM_IC_Start_DMA(&htim4, TIM_CHANNEL_3, (uint32_t *)s_gate_rising_ticks, PWM_CAPTURE_BURST_SAMPLES) != HAL_OK)
+        start_status = HAL_TIM_IC_Start_DMA(&htim4, TIM_CHANNEL_3, (uint32_t *)s_gate_rising_ticks, PWM_CAPTURE_BURST_SAMPLES);
+        if (start_status != HAL_OK)
         {
             success = false;
         }
         break;
 
     default:
+        start_status = HAL_ERROR;
         success = false;
         break;
     }
+
+    job->diagnostics.last_start_status = (uint32_t)start_status;
+    job->diagnostics.last_start_ok = success;
 
     if (!success)
     {
@@ -765,6 +788,10 @@ static bool pwm_capture_drv_arm_job(pwm_capture_job_t *job)
         job->done_mask = 0U;
         job->dma_error = true;
         job->armed = false;
+        job->diagnostics.armed = false;
+        job->diagnostics.dma_error = true;
+        job->diagnostics.data_valid = false;
+        job->diagnostics.last_process_ok = false;
         pwm_capture_drv_invalidate_job(job);
     }
 
@@ -795,12 +822,19 @@ static bool pwm_capture_drv_finalize_job(pwm_capture_job_t *job)
 
     rise_count = pwm_capture_drv_get_captured_sample_count(pwm_capture_drv_get_rise_dma(job));
     fall_count = pwm_capture_drv_get_captured_sample_count(pwm_capture_drv_get_fall_dma(job));
+    job->diagnostics.last_rise_count = rise_count;
+    job->diagnostics.last_done_mask = job->done_mask;
     pwm_capture_drv_stop_job(job);
     job->armed = false;
     job->completed_once = true;
+    job->diagnostics.armed = false;
+    job->diagnostics.completed_once = true;
+    job->diagnostics.dma_error = job->dma_error;
 
     if (job->dma_error)
     {
+        job->diagnostics.last_process_ok = false;
+        job->diagnostics.data_valid = false;
         pwm_capture_drv_invalidate_job(job);
         return false;
     }
@@ -812,6 +846,7 @@ static bool pwm_capture_drv_finalize_job(pwm_capture_job_t *job)
     {
     case PWM_CAPTURE_SIGNAL_LTC3901_ME:
         tick_hz = pwm_capture_drv_get_tick_hz(&htim4);
+        job->diagnostics.last_tick_hz = tick_hz;
         processed_ok = pwm_capture_drv_process_pwm_u16(s_me_rising_ticks,
                                                        rise_count,
                                                        s_me_falling_ticks,
@@ -822,6 +857,7 @@ static bool pwm_capture_drv_finalize_job(pwm_capture_job_t *job)
 
     case PWM_CAPTURE_SIGNAL_LTC3901_MF:
         tick_hz = pwm_capture_drv_get_tick_hz(&htim2);
+        job->diagnostics.last_tick_hz = tick_hz;
         processed_ok = pwm_capture_drv_process_pwm_u32(s_mf_rising_ticks,
                                                        rise_count,
                                                        s_mf_falling_ticks,
@@ -832,6 +868,7 @@ static bool pwm_capture_drv_finalize_job(pwm_capture_job_t *job)
 
     case PWM_CAPTURE_SIGNAL_LT8316_GATE:
         tick_hz = pwm_capture_drv_get_tick_hz(&htim4);
+        job->diagnostics.last_tick_hz = tick_hz;
         processed_ok = pwm_capture_drv_process_frequency_u16(s_gate_rising_ticks,
                                                              rise_count,
                                                              tick_hz,
@@ -847,6 +884,8 @@ static bool pwm_capture_drv_finalize_job(pwm_capture_job_t *job)
         pwm_capture_drv_invalidate_job(job);
     }
 
+    job->diagnostics.last_process_ok = processed_ok;
+    job->diagnostics.data_valid = job->result.data_valid;
     return processed_ok;
 }
 
@@ -906,6 +945,11 @@ void pwm_capture_drv_task(void)
         if (job->dma_error || pwm_capture_drv_job_is_complete(job) ||
             ((now_ms - job->start_ms) >= PWM_CAPTURE_BURST_TIMEOUT_MS))
         {
+            if (!job->dma_error && !pwm_capture_drv_job_is_complete(job))
+            {
+                job->diagnostics.timeout_count++;
+            }
+
             (void)pwm_capture_drv_finalize_job(job);
 
             if (s_repeat_enabled)
@@ -980,6 +1024,17 @@ bool pwm_capture_drv_get_result(pwm_capture_signal_t signal, pwm_capture_result_
     return s_jobs[(unsigned int)signal].result.data_valid;
 }
 
+bool pwm_capture_drv_get_diagnostics(pwm_capture_signal_t signal, pwm_capture_diagnostics_t *diagnostics_out)
+{
+    if ((diagnostics_out == NULL) || ((unsigned int)signal >= (unsigned int)PWM_CAPTURE_SIGNAL_COUNT))
+    {
+        return false;
+    }
+
+    *diagnostics_out = s_jobs[(unsigned int)signal].diagnostics;
+    return true;
+}
+
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
     if (htim == &htim4)
@@ -995,6 +1050,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
         else if ((htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3) && s_jobs[PWM_CAPTURE_SIGNAL_LT8316_GATE].armed)
         {
             s_jobs[PWM_CAPTURE_SIGNAL_LT8316_GATE].done_mask |= PWM_CAPTURE_JOB_DONE_RISE;
+            s_jobs[PWM_CAPTURE_SIGNAL_LT8316_GATE].diagnostics.dma_complete_count++;
         }
     }
     else if (htim == &htim2)
@@ -1022,6 +1078,7 @@ void HAL_TIM_ErrorCallback(TIM_HandleTypeDef *htim)
         if (s_jobs[PWM_CAPTURE_SIGNAL_LT8316_GATE].armed)
         {
             s_jobs[PWM_CAPTURE_SIGNAL_LT8316_GATE].dma_error = true;
+            s_jobs[PWM_CAPTURE_SIGNAL_LT8316_GATE].diagnostics.dma_error = true;
         }
     }
     else if ((htim == &htim2) && s_jobs[PWM_CAPTURE_SIGNAL_LTC3901_MF].armed)

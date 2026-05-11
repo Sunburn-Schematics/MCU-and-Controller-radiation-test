@@ -211,6 +211,7 @@ Current implementation notes:
 - `LTC3901_ME_Tmr` uses `TIM4_CH1` rising-edge DMA plus paired `TIM4_CH2` falling-edge DMA
 - `LTC3901_MF_Tmr` uses `TIM2_CH1` rising-edge DMA plus paired `TIM2_CH2` falling-edge DMA
 - `LT8316_Gate_Tmr` currently uses `TIM4_CH3` rising-edge DMA only, so frequency is reported while duty-cycle capture remains deferred
+- TIM2 and TIM4 use a common capture prescaler, producing a 10.5 MHz capture tick from the 84 MHz APB1 timer clock. This preserves useful resolution for hundreds-of-kHz LTC3901 timing while keeping low-kHz LT8316 gate periods inside TIM4's 16-bit wrap interval.
 
 #### `sync_drv.*`
 Owns synchronized output generation for:
@@ -295,5 +296,4 @@ Not yet implemented in this driver:
 
 - calibrated VDDA compensation using VREFINT
 - fault thresholds or policy decisions
-- timer-derived frequency or duty-cycle measurements
 - non-volatile storage for calibration factors

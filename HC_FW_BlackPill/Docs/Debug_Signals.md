@@ -177,14 +177,30 @@ JSON Example:
 | `pwm.mf.duty_pct`  | `int` | %     | `LTC3901_MF_Tmr` duty cycle |
 | `pwm.gate.freq_hz` | `int` | Hz    | `LT8316_Gate_Tmr` frequency |
 
+### PWM Gate Capture Diagnostics
+
+| Signal                  | Type   | Units | Source                                                                     |
+| ----------------------- | ------ | ----- | -------------------------------------------------------------------------- |
+| `pwm.gate.valid`        | `bool` | n/a   | Last `LT8316_Gate_Tmr` result validity                                     |
+| `pwm.gate.armed`        | `bool` | n/a   | Current `LT8316_Gate_Tmr` capture armed state                              |
+| `pwm.gate.start_ok`     | `bool` | n/a   | Last TIM4_CH3 DMA start result                                             |
+| `pwm.gate.start_status` | `int`  | n/a   | Last HAL status from TIM4_CH3 DMA start; `0` is `HAL_OK`                   |
+| `pwm.gate.process_ok`   | `bool` | n/a   | Last sample processing result                                              |
+| `pwm.gate.rise_count`   | `int`  | count | Rising-edge samples captured in the last completed gate burst              |
+| `pwm.gate.done_mask`    | `int`  | mask  | Last completed gate burst done mask; `1` means rising DMA completed        |
+| `pwm.gate.tick_hz`      | `int`  | Hz    | Capture timer tick used for the last gate calculation                      |
+| `pwm.gate.dma_error`    | `bool` | n/a   | Last gate burst DMA error state                                            |
+| `pwm.gate.dma_done_cnt` | `int`  | count | Number of gate rising DMA-complete callbacks since capture start           |
+| `pwm.gate.timeout_cnt`  | `int`  | count | Number of gate bursts finalized by timeout rather than full DMA completion |
+
 JSON Example:
 
 ```json
-{"type":"GET","msg":200,"args":{"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz"]}}
+{"type":"GET","msg":200,"args":{"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count","pwm.gate.process_ok"]}}
 ```
 
 ```json
-{"type":"SET","msg":201,"args":{"dbg_period_ms":100,"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz"]}}
+{"type":"SET","msg":201,"args":{"dbg_period_ms":2000,"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count","pwm.gate.process_ok"]}}
 ```
 
 Notes:
@@ -268,12 +284,21 @@ Explanation:
 3. Enable power to the LTC3901
 4. Enable the Sync Signal to the LTC3901
 ```json
-{"type":"SET","msg":18,"args":{"sts_period_ms":0}}
+# Status OFF: {"type":"SET","msg":18,"args":{"sts_period_ms":0}}
+
+# Debug Loop (5 second refresh)
 {"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.mv","ltc3901.pwr_en","adc.ltc3901_vcc.mv","pwm.me.freq_hz","adc.ltc3901_me.mv"]}}
 
 {"type":"SET","msg":124,"args":{"dbg_signals":{"ltc3901.pwr_en":true}}}{"type":"SET","msg":124,"args":{"dbg_signals":{"sync.enable":true}}}
 
-{"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.raw","adc.ltc3901_vcc.raw","adc.lt8316_vout.raw","adc.ltc3901_me.raw","adc.ltc3901_mf.raw"]}}
+# Monitor LTC3901 Signals
+{"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.raw","adc.ltc3901_vcc.raw","adc.ltc3901_me.raw","adc.ltc3901_mf.raw","pwm.me.freq_hz","pwm.mf.freq_hz"]}}
+
+# Monitor LT8316 Signals
+{"type":"SET","msg":101,"args":{"dbg_period_ms":1000,"dbg_signals":["pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.armed","pwm.gate.start_ok","pwm.gate.start_status","pwm.gate.process_ok","pwm.gate.rise_count","pwm.gate.done_mask","pwm.gate.tick_hz","pwm.gate.dma_error","pwm.gate.dma_done_cnt","pwm.gate.timeout_cnt"]}}
+
+# Debug OFF
+{"type":"SET","msg":21,"args":{"dbg_period_ms":0}}
 
 ```
 `vupstream`

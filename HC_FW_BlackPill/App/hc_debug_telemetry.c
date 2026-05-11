@@ -9,6 +9,7 @@
 #include "bsp_board.h"
 #include "main.h"
 #include "fw_app.h"
+#include "pwm_capture_drv.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -332,6 +333,150 @@ static bool hc_debug_telemetry_get_pwm_gate_freq(hc_debug_value_t *value_out)
     return hc_debug_telemetry_get_status_int(s_active_status->Lt8316.GateFreq_Hz, value_out);
 }
 
+static bool hc_debug_telemetry_get_pwm_gate_diag_int(uint32_t value, hc_debug_value_t *value_out)
+{
+    if (value_out == NULL)
+    {
+        return false;
+    }
+
+    value_out->Type = HC_DEBUG_VALUE_INT;
+    value_out->Data.IntValue = (int32_t)value;
+    return true;
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_valid(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_status_bool(diagnostics.data_valid, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_armed(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_status_bool(diagnostics.armed, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_start_ok(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_status_bool(diagnostics.last_start_ok, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_process_ok(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_status_bool(diagnostics.last_process_ok, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_dma_error(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_status_bool(diagnostics.dma_error, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_start_status(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_pwm_gate_diag_int(diagnostics.last_start_status, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_rise_count(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_pwm_gate_diag_int(diagnostics.last_rise_count, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_done_mask(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_pwm_gate_diag_int(diagnostics.last_done_mask, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_tick_hz(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_pwm_gate_diag_int(diagnostics.last_tick_hz, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_dma_done_count(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_pwm_gate_diag_int(diagnostics.dma_complete_count, value_out);
+}
+
+static bool hc_debug_telemetry_get_pwm_gate_timeout_count(hc_debug_value_t *value_out)
+{
+    pwm_capture_diagnostics_t diagnostics;
+
+    if (!pwm_capture_drv_get_diagnostics(PWM_CAPTURE_SIGNAL_LT8316_GATE, &diagnostics))
+    {
+        return false;
+    }
+
+    return hc_debug_telemetry_get_pwm_gate_diag_int(diagnostics.timeout_count, value_out);
+}
+
 static bool hc_debug_telemetry_get_beam_on(hc_debug_value_t *value_out)
 {
     if (s_active_status == NULL)
@@ -458,6 +603,17 @@ static const hc_debug_signal_def_t s_signal_catalog[] = {
     { "pwm.mf.freq_hz",        hc_debug_telemetry_get_pwm_mf_freq },
     { "pwm.mf.duty_pct",       hc_debug_telemetry_get_pwm_mf_duty },
     { "pwm.gate.freq_hz",      hc_debug_telemetry_get_pwm_gate_freq },
+    { "pwm.gate.valid",        hc_debug_telemetry_get_pwm_gate_valid },
+    { "pwm.gate.armed",        hc_debug_telemetry_get_pwm_gate_armed },
+    { "pwm.gate.start_ok",     hc_debug_telemetry_get_pwm_gate_start_ok },
+    { "pwm.gate.start_status", hc_debug_telemetry_get_pwm_gate_start_status },
+    { "pwm.gate.process_ok",   hc_debug_telemetry_get_pwm_gate_process_ok },
+    { "pwm.gate.rise_count",   hc_debug_telemetry_get_pwm_gate_rise_count },
+    { "pwm.gate.done_mask",    hc_debug_telemetry_get_pwm_gate_done_mask },
+    { "pwm.gate.tick_hz",      hc_debug_telemetry_get_pwm_gate_tick_hz },
+    { "pwm.gate.dma_error",    hc_debug_telemetry_get_pwm_gate_dma_error },
+    { "pwm.gate.dma_done_cnt", hc_debug_telemetry_get_pwm_gate_dma_done_count },
+    { "pwm.gate.timeout_cnt",  hc_debug_telemetry_get_pwm_gate_timeout_count },
     { "beam_on",               hc_debug_telemetry_get_beam_on },
     { "ltc3901.pwr_en",        hc_debug_telemetry_get_ltc3901_pwr_en },
     { "lt8316.pwr_en",         hc_debug_telemetry_get_lt8316_pwr_en },
