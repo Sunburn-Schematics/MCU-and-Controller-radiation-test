@@ -22,7 +22,7 @@ This document captures the current STM32F401 Black Pill target pin assignments f
 | `SDRB` | `PB5` | `TIM3_CH2` | Companion quadrature output for `SDRA` |
 | `LTC3901_ME_Tmr` | `PB6` | `TIM4_CH1` input with paired `TIM4_CH2` capture | Timer input capture - measure frequency and pulse width from one external input using the timer's internal paired channel path |
 | `LTC3901_MF_Tmr` | `PA15` | `TIM2_CH1` input with paired `TIM2_CH2` capture | Timer input capture - measure frequency and pulse width from one external input using the timer's internal paired channel path |
-| `LT8316_Gate_Tmr` | `PB8` | `TIM4_CH3` input capture | Timer input capture - measure low-kHz gate frequency from rising-edge timestamps using the common PWM capture timer tick; duty-cycle capture deferred in the current implementation |
+| `LT8316_Gate_Tmr` | `PB8` | `TIM4_CH3` input capture | Timer input capture - measure low-kHz gate frequency from rising-edge timestamps |
 | `VUpstream_Anlg` | `PA0` | `ADC1_IN0` | Sense LTC3901 voltage on the high side of the current sense resistor |
 | `LTC3901_Vcc_Anlg` | `PA1` | `ADC1_IN1` | Sense LTC3901 voltage on the low side of the current sense resistor |
 | `LT8316_Vout_Anlg` | `PA2` | `ADC1_IN2` | Sense LT8316 regulated output voltage |

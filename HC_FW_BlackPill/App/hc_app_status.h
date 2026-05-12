@@ -64,7 +64,6 @@ typedef struct
     hc_dut_state_t State;
     bool PowerEnabled;
     int32_t GateFreq_Hz;
-    int32_t GateRatio_Pct;
     int32_t GateAnlg_mV;
     int32_t VOut_mV;
     hc_fault_summary_t Faults;

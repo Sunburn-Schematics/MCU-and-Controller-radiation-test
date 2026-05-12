@@ -291,7 +291,7 @@ Notes:
 
 Example emitted line:
 ```json
-{"type":"STS","hc_id":1,"ts":"20260501 10:30:00","state":"NORMAL","beam_on":false,"duts":{"LTC3901":{"state":"NORMAL","pwr_en":false,"sync":true,"vsupply":null,"vshunt":null,"isupply":null,"me_freq":null,"me_ratio":null,"me_anlg":null,"mf_freq":null,"mf_ratio":null,"mf_anlg":null,"faults":{"count":0,"summary":"NONE","ids":[]}},"LT8316":{"state":"NORMAL","pwr_en":false,"gate_freq":null,"gate_ratio":null,"gate_anlg":null,"vout":null,"faults":{"count":0,"summary":"NONE","ids":[]}}}}
+{"type":"STS","hc_id":1,"ts":"20260501 10:30:00","state":"NORMAL","beam_on":false,"duts":{"LTC3901":{"state":"NORMAL","pwr_en":false,"sync":true,"vsupply":null,"vshunt":null,"isupply":null,"me_freq":null,"me_ratio":null,"me_anlg":null,"mf_freq":null,"mf_ratio":null,"mf_anlg":null,"faults":{"count":0,"summary":"NONE","ids":[]}},"LT8316":{"state":"NORMAL","pwr_en":false,"gate_freq":null,"gate_anlg":null,"vout":null,"faults":{"count":0,"summary":"NONE","ids":[]}}}}
 ```
 
 Notes:

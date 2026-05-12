@@ -290,7 +290,6 @@ The `duts.LT8316` object shall include:
 - `state`
 - `pwr_en`
 - `gate_freq`
-- `gate_ratio`
 - `gate_anlg`
 - `vout`
 - `faults`
@@ -321,7 +320,7 @@ For v1, the following conventions are recommended:
 - `vshunt` uses millivolts (`mV`)
 - `isupply` uses milliamps (`mA`)
 - fields ending in `_freq` use hertz (`Hz`)
-- fields ending in `_ratio` use percent over the range `0` to `100`
+- populated fields ending in `_ratio` use percent over the range `0` to `100`
 - fields ending in `_anlg` use millivolts (`mV`)
 - `vout` uses millivolts (`mV`)
 - `faults.count` uses a JSON integer
@@ -332,7 +331,7 @@ For v1, frequency and analog measurement fields reported in `STS` should follow 
 - reported values shall be scaled into engineering units before transmission in `STS`; raw ADC counts, timer counts, or other unscaled internal values should not be used in the periodic `STS` payload
 - fields ending in `_freq` should represent the measured signal frequency in hertz after applying the relevant timer/counter scaling and any required averaging or qualification logic
 - fields ending in `_anlg` should represent the measured analog signal level in millivolts after applying the relevant ADC scaling, reference conversion, divider or gain correction, and any required averaging or qualification logic
-- fields ending in `_ratio` should represent a derived duty, activity, or proportion metric scaled to the range `0` to `100`
+- populated fields ending in `_ratio` should represent a derived duty, activity, or proportion metric scaled to the range `0` to `100`
 - capture and scaling behavior shall be deterministic for a given firmware build and shall use the same interpretation for all emitted `STS` lines
 - any averaging, filtering, debounce, or qualification used before publishing measurement values shall be controlled by named HC variables rather than fixed numeric values in this specification
 - if a measurement is not valid because the DUT is powered off, isolated, restarting, or otherwise not in a condition where the measurement is meaningful, the firmware shall still emit the field and shall use `null` as the preferred invalid or unavailable value representation; if `null` cannot be accommodated by the protocol implementation, the value `-1` shall be used instead
@@ -340,7 +339,9 @@ For v1, frequency and analog measurement fields reported in `STS` should follow 
 For v1, the intended field-specific interpretation is:
 - `me_freq`, `mf_freq`, and `gate_freq`: frequency-like measurements reported in `Hz`
 - `me_anlg`, `mf_anlg`, `gate_anlg`, `vsupply`, `vshunt`, and `vout`: analog-derived measurements reported in `mV`
-- `me_ratio`, `mf_ratio`, and `gate_ratio`: derived ratio measurements reported over the range `0` to `100`
+- `isupply`: derived LTC3901 supply current reported in `mA` as `(vsupply - vshunt) * 0.367`
+- `me_ratio`: derived LTC3901 ME duty ratio reported over the range `0` to `100`
+- `mf_ratio`: derived LTC3901 MF duty ratio reported over the range `0` to `100`
 
 Applicable scaling and qualification variables may include, for example:
 - ADC conversion and analog front-end variables for reference voltage, gain, and divider correction
@@ -418,7 +419,7 @@ Immediate event emission is not required for DUT-local fault, restart, recovery,
 
 #### 8.3.12 Canonical Example `STS` JSONL Object
 Example single emitted JSONL line:
-- `{ "type": "STS", "hc_id": 63, "ts": "20260501 10:30:00", "state": "NORMAL", "beam_on": true, "duts": { "LTC3901": { "state": "NORMAL", "pwr_en": true, "sync": true, "vsupply": 12345, "vshunt": 12345, "isupply": 12345, "me_freq": 12345, "me_ratio": 50, "me_anlg": 12345, "mf_freq": 12345, "mf_ratio": 50, "mf_anlg": 12345, "faults": { "count": 0, "summary": "NONE", "ids": [] } }, "LT8316": { "state": "NORMAL", "pwr_en": true, "gate_freq": 12345, "gate_ratio": 50, "gate_anlg": 12345, "vout": 12345, "faults": { "count": 1, "summary": "SINGLE", "ids": ["HLF-010"] } } } }`
+- `{ "type": "STS", "hc_id": 63, "ts": "20260501 10:30:00", "state": "NORMAL", "beam_on": true, "duts": { "LTC3901": { "state": "NORMAL", "pwr_en": true, "sync": true, "vsupply": 12345, "vshunt": 12345, "isupply": 12345, "me_freq": 12345, "me_ratio": 50, "me_anlg": 12345, "mf_freq": 12345, "mf_ratio": 50, "mf_anlg": 12345, "faults": { "count": 0, "summary": "NONE", "ids": [] } }, "LT8316": { "state": "NORMAL", "pwr_en": true, "gate_freq": 12345, "gate_anlg": 12345, "vout": 12345, "faults": { "count": 1, "summary": "SINGLE", "ids": ["HLF-010"] } } } }`
 
 Field ordering should be kept stable in firmware where practical, even though JSON object ordering is not semantically significant.
 

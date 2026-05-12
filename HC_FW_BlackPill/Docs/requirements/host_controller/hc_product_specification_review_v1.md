@@ -264,7 +264,6 @@ The `duts.LT8316` object includes:
 - `state`
 - `pwr_en`
 - `gate_freq`
-- `gate_ratio`
 - `gate_anlg`
 - `vout`
 - `faults`
@@ -289,12 +288,13 @@ Periodic `STS` measurement values shall be reported in engineering units. Raw AD
 - `*_anlg` fields are reported in `mV`
 - `vsupply`, `vshunt`, and `vout` are reported in `mV`
 - `isupply` is reported in `mA`
-- `*_ratio` fields are reported over the range `0` to `100`
+- populated `*_ratio` fields are reported over the range `0` to `100`
 
 ### 13.3 Field-Specific Interpretation
 - `me_freq`, `mf_freq`, `gate_freq`: frequency-like measurements in `Hz`
 - `me_anlg`, `mf_anlg`, `gate_anlg`, `vsupply`, `vshunt`, `vout`: analog-derived measurements in `mV`
-- `me_ratio`, `mf_ratio`, `gate_ratio`: derived ratio measurements over `0` to `100`
+- `me_ratio`: derived LTC3901 ME duty ratio over `0` to `100`
+- `mf_ratio`: derived LTC3901 MF duty ratio over `0` to `100`
 
 ### 13.4 Publication Behavior
 - capture/scaling behavior shall be deterministic for a given firmware build

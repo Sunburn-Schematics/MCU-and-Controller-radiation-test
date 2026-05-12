@@ -189,6 +189,8 @@ Responsibilities:
 - provide stable channel enumeration
 - return raw counts, nominal millivolts, and optional per-channel engineering-unit conversion using `y = mx + c`
 
+`hc_app_status` derives the `STS` `isupply` field from the ADC driver outputs as `(VUpstream_Anlg - LTC3901_Vcc_Anlg) * 0.367`, reported in milliamps after fixed-point rounding. If either source voltage is invalid, or the computed shunt voltage would be negative, `isupply` is reported as unavailable.
+
 #### `pwm_capture_drv.*`
 Owns timer-based measurement for:
 
@@ -210,7 +212,7 @@ Current implementation notes:
 - each burst captures up to 16 timestamps per active edge stream and processes the burst offline using the number of samples actually captured
 - `LTC3901_ME_Tmr` uses `TIM4_CH1` rising-edge DMA plus paired `TIM4_CH2` falling-edge DMA
 - `LTC3901_MF_Tmr` uses `TIM2_CH1` rising-edge DMA plus paired `TIM2_CH2` falling-edge DMA
-- `LT8316_Gate_Tmr` currently uses `TIM4_CH3` rising-edge DMA only, so frequency is reported while duty-cycle capture remains deferred
+- `LT8316_Gate_Tmr` uses `TIM4_CH3` rising-edge DMA only, so frequency is reported while duty-cycle capture is intentionally not measured
 - TIM2 and TIM4 use a common capture prescaler, producing a 10.5 MHz capture tick from the 84 MHz APB1 timer clock. This preserves useful resolution for hundreds-of-kHz LTC3901 timing while keeping low-kHz LT8316 gate periods inside TIM4's 16-bit wrap interval.
 
 #### `sync_drv.*`

@@ -183,11 +183,11 @@ JSON Example:
 | ----------------------- | ------ | ----- | -------------------------------------------------------------------------- |
 | `pwm.gate.valid`        | `bool` | n/a   | Last `LT8316_Gate_Tmr` result validity                                     |
 | `pwm.gate.armed`        | `bool` | n/a   | Current `LT8316_Gate_Tmr` capture armed state                              |
-| `pwm.gate.start_ok`     | `bool` | n/a   | Last TIM4_CH3 DMA start result                                             |
-| `pwm.gate.start_status` | `int`  | n/a   | Last HAL status from TIM4_CH3 DMA start; `0` is `HAL_OK`                   |
+| `pwm.gate.start_ok`     | `bool` | n/a   | Last gate capture start result                                             |
+| `pwm.gate.start_status` | `int`  | n/a   | Last HAL status from gate capture start; `0` is `HAL_OK`                   |
 | `pwm.gate.process_ok`   | `bool` | n/a   | Last sample processing result                                              |
 | `pwm.gate.rise_count`   | `int`  | count | Rising-edge samples captured in the last completed gate burst              |
-| `pwm.gate.done_mask`    | `int`  | mask  | Last completed gate burst done mask; `1` means rising DMA completed        |
+| `pwm.gate.done_mask`    | `int`  | mask  | Last completed gate burst done mask; bit 0 is rising                       |
 | `pwm.gate.tick_hz`      | `int`  | Hz    | Capture timer tick used for the last gate calculation                      |
 | `pwm.gate.dma_error`    | `bool` | n/a   | Last gate burst DMA error state                                            |
 | `pwm.gate.dma_done_cnt` | `int`  | count | Number of gate rising DMA-complete callbacks since capture start           |
@@ -196,16 +196,15 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":200,"args":{"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count","pwm.gate.process_ok"]}}
+{"type":"GET","msg":200,"args":{"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count"]}}
 ```
 
 ```json
-{"type":"SET","msg":201,"args":{"dbg_period_ms":2000,"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count","pwm.gate.process_ok"]}}
+{"type":"SET","msg":201,"args":{"dbg_period_ms":2000,"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count"]}}
 ```
 
 Notes:
 
-- `pwm.gate.freq_hz` is frequency-only at present.
 - Any unavailable PWM result is emitted as `null`.
 
 ## Digital / State Signals

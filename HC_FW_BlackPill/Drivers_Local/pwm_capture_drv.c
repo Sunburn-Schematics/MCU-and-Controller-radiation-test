@@ -332,12 +332,12 @@ static bool pwm_capture_drv_process_pwm_u16(const uint16_t *rising_ticks,
 {
     uint64_t period_sum;
     uint64_t high_sum;
+    uint64_t duty_period_sum;
     uint32_t avg_period_ticks;
     uint32_t avg_high_ticks;
     uint32_t i;
     uint8_t valid_period_samples;
     uint8_t best_duty_samples;
-    uint8_t best_offset;
 
     if ((rising_ticks == NULL) || (falling_ticks == NULL) || (result_out == NULL) || (tick_hz == 0U))
     {
@@ -365,305 +365,51 @@ static bool pwm_capture_drv_process_pwm_u16(const uint16_t *rising_ticks,
     result_out->valid_samples = valid_period_samples;
     result_out->data_valid = true;
 
+    high_sum = 0ULL;
+    duty_period_sum = 0ULL;
     best_duty_samples = 0U;
-    best_offset = 0U;
-
-    for (best_offset = 0U; best_offset <= 1U; ++best_offset)
+    for (i = 0U; (i + 1U) < rising_count; ++i)
     {
-        uint8_t duty_samples;
-        uint32_t sample_limit;
+        uint16_t period_ticks;
+        uint16_t best_high_ticks;
+        uint32_t fall_index;
+        bool matched_fall;
 
-        if (falling_count <= best_offset)
+        period_ticks = (uint16_t)(rising_ticks[i + 1U] - rising_ticks[i]);
+        if (period_ticks == 0U)
         {
             continue;
         }
 
-        sample_limit = rising_count - 1U;
-        if ((falling_count - best_offset) < sample_limit)
+        best_high_ticks = period_ticks;
+        matched_fall = false;
+        for (fall_index = 0U; fall_index < falling_count; ++fall_index)
         {
-            sample_limit = falling_count - best_offset;
-        }
-
-        duty_samples = 0U;
-        for (i = 0U; i < sample_limit; ++i)
-        {
-            uint16_t period_ticks;
             uint16_t high_ticks;
 
-            period_ticks = (uint16_t)(rising_ticks[i + 1U] - rising_ticks[i]);
-            high_ticks = (uint16_t)(falling_ticks[i + best_offset] - rising_ticks[i]);
-
-            if ((period_ticks == 0U) || (high_ticks == 0U) || (high_ticks >= period_ticks))
+            high_ticks = (uint16_t)(falling_ticks[fall_index] - rising_ticks[i]);
+            if ((high_ticks != 0U) && (high_ticks < best_high_ticks))
             {
-                continue;
-            }
-
-            duty_samples++;
-        }
-
-        if (duty_samples > best_duty_samples)
-        {
-            best_duty_samples = duty_samples;
-        }
-    }
-
-    if (best_duty_samples == 0U)
-    {
-        return true;
-    }
-
-    {
-        uint8_t offset0_samples;
-        uint8_t offset1_samples;
-        uint32_t offset0_limit;
-        uint32_t offset1_limit;
-
-        offset0_samples = 0U;
-        offset1_samples = 0U;
-        offset0_limit = (falling_count < (rising_count - 1U)) ? falling_count : (rising_count - 1U);
-        offset1_limit = (falling_count > 0U) ? (falling_count - 1U) : 0U;
-        if (offset1_limit > (rising_count - 1U))
-        {
-            offset1_limit = rising_count - 1U;
-        }
-
-        for (i = 0U; i < offset0_limit; ++i)
-        {
-            uint16_t period_ticks;
-            uint16_t high_ticks;
-
-            period_ticks = (uint16_t)(rising_ticks[i + 1U] - rising_ticks[i]);
-            high_ticks = (uint16_t)(falling_ticks[i] - rising_ticks[i]);
-            if ((period_ticks != 0U) && (high_ticks != 0U) && (high_ticks < period_ticks))
-            {
-                offset0_samples++;
+                best_high_ticks = high_ticks;
+                matched_fall = true;
             }
         }
 
-        for (i = 0U; i < offset1_limit; ++i)
-        {
-            uint16_t period_ticks;
-            uint16_t high_ticks;
-
-            period_ticks = (uint16_t)(rising_ticks[i + 1U] - rising_ticks[i]);
-            high_ticks = (uint16_t)(falling_ticks[i + 1U] - rising_ticks[i]);
-            if ((period_ticks != 0U) && (high_ticks != 0U) && (high_ticks < period_ticks))
-            {
-                offset1_samples++;
-            }
-        }
-
-        best_offset = (offset1_samples > offset0_samples) ? 1U : 0U;
-    }
-
-    high_sum = 0ULL;
-    best_duty_samples = 0U;
-    {
-        uint32_t sample_limit;
-
-        sample_limit = rising_count - 1U;
-        if ((falling_count - best_offset) < sample_limit)
-        {
-            sample_limit = falling_count - best_offset;
-        }
-
-        for (i = 0U; i < sample_limit; ++i)
-        {
-            uint16_t period_ticks;
-            uint16_t high_ticks;
-
-            period_ticks = (uint16_t)(rising_ticks[i + 1U] - rising_ticks[i]);
-            high_ticks = (uint16_t)(falling_ticks[i + best_offset] - rising_ticks[i]);
-
-            if ((period_ticks == 0U) || (high_ticks == 0U) || (high_ticks >= period_ticks))
-            {
-                continue;
-            }
-
-            high_sum += (uint64_t)high_ticks;
-            best_duty_samples++;
-        }
-    }
-
-    if (best_duty_samples > 0U)
-    {
-        avg_high_ticks = (uint32_t)((high_sum + ((uint64_t)best_duty_samples / 2ULL)) / (uint64_t)best_duty_samples);
-        result_out->high_ticks_avg = avg_high_ticks;
-        result_out->duty_pct_x100 = (uint16_t)(((10000ULL * high_sum) + (period_sum / 2ULL)) / period_sum);
-        result_out->valid_samples = best_duty_samples;
-        result_out->has_duty_cycle = true;
-    }
-
-    return true;
-}
-
-static bool pwm_capture_drv_process_pwm_u32(const uint32_t *rising_ticks,
-                                            uint32_t rising_count,
-                                            const uint32_t *falling_ticks,
-                                            uint32_t falling_count,
-                                            uint32_t tick_hz,
-                                            pwm_capture_result_t *result_out)
-{
-    uint64_t period_sum;
-    uint64_t high_sum;
-    uint32_t avg_period_ticks;
-    uint32_t avg_high_ticks;
-    uint32_t i;
-    uint8_t valid_period_samples;
-    uint8_t best_duty_samples;
-    uint8_t best_offset;
-
-    if ((rising_ticks == NULL) || (falling_ticks == NULL) || (result_out == NULL) || (tick_hz == 0U))
-    {
-        return false;
-    }
-
-    valid_period_samples = pwm_capture_drv_compute_period_stats_u32(rising_ticks,
-                                                                    rising_count,
-                                                                    &period_sum,
-                                                                    &avg_period_ticks);
-    if (valid_period_samples < PWM_CAPTURE_MIN_PERIOD_SAMPLES)
-    {
-        return false;
-    }
-
-    if (avg_period_ticks == 0U)
-    {
-        return false;
-    }
-
-    pwm_capture_drv_reset_result(result_out);
-    result_out->frequency_hz = (uint32_t)(((uint64_t)tick_hz + ((uint64_t)avg_period_ticks / 2ULL)) /
-                                          (uint64_t)avg_period_ticks);
-    result_out->period_ticks_avg = avg_period_ticks;
-    result_out->valid_samples = valid_period_samples;
-    result_out->data_valid = true;
-
-    best_duty_samples = 0U;
-    best_offset = 0U;
-
-    for (best_offset = 0U; best_offset <= 1U; ++best_offset)
-    {
-        uint8_t duty_samples;
-        uint32_t sample_limit;
-
-        if (falling_count <= best_offset)
+        if (!matched_fall)
         {
             continue;
         }
 
-        sample_limit = rising_count - 1U;
-        if ((falling_count - best_offset) < sample_limit)
-        {
-            sample_limit = falling_count - best_offset;
-        }
-
-        duty_samples = 0U;
-        for (i = 0U; i < sample_limit; ++i)
-        {
-            uint32_t period_ticks;
-            uint32_t high_ticks;
-
-            period_ticks = rising_ticks[i + 1U] - rising_ticks[i];
-            high_ticks = falling_ticks[i + best_offset] - rising_ticks[i];
-
-            if ((period_ticks == 0U) || (high_ticks == 0U) || (high_ticks >= period_ticks))
-            {
-                continue;
-            }
-
-            duty_samples++;
-        }
-
-        if (duty_samples > best_duty_samples)
-        {
-            best_duty_samples = duty_samples;
-        }
+        high_sum += (uint64_t)best_high_ticks;
+        duty_period_sum += (uint64_t)period_ticks;
+        best_duty_samples++;
     }
 
-    if (best_duty_samples == 0U)
-    {
-        return true;
-    }
-
-    {
-        uint8_t offset0_samples;
-        uint8_t offset1_samples;
-        uint32_t offset0_limit;
-        uint32_t offset1_limit;
-
-        offset0_samples = 0U;
-        offset1_samples = 0U;
-        offset0_limit = (falling_count < (rising_count - 1U)) ? falling_count : (rising_count - 1U);
-        offset1_limit = (falling_count > 0U) ? (falling_count - 1U) : 0U;
-        if (offset1_limit > (rising_count - 1U))
-        {
-            offset1_limit = rising_count - 1U;
-        }
-
-        for (i = 0U; i < offset0_limit; ++i)
-        {
-            uint32_t period_ticks;
-            uint32_t high_ticks;
-
-            period_ticks = rising_ticks[i + 1U] - rising_ticks[i];
-            high_ticks = falling_ticks[i] - rising_ticks[i];
-            if ((period_ticks != 0U) && (high_ticks != 0U) && (high_ticks < period_ticks))
-            {
-                offset0_samples++;
-            }
-        }
-
-        for (i = 0U; i < offset1_limit; ++i)
-        {
-            uint32_t period_ticks;
-            uint32_t high_ticks;
-
-            period_ticks = rising_ticks[i + 1U] - rising_ticks[i];
-            high_ticks = falling_ticks[i + 1U] - rising_ticks[i];
-            if ((period_ticks != 0U) && (high_ticks != 0U) && (high_ticks < period_ticks))
-            {
-                offset1_samples++;
-            }
-        }
-
-        best_offset = (offset1_samples > offset0_samples) ? 1U : 0U;
-    }
-
-    high_sum = 0ULL;
-    best_duty_samples = 0U;
-    {
-        uint32_t sample_limit;
-
-        sample_limit = rising_count - 1U;
-        if ((falling_count - best_offset) < sample_limit)
-        {
-            sample_limit = falling_count - best_offset;
-        }
-
-        for (i = 0U; i < sample_limit; ++i)
-        {
-            uint32_t period_ticks;
-            uint32_t high_ticks;
-
-            period_ticks = rising_ticks[i + 1U] - rising_ticks[i];
-            high_ticks = falling_ticks[i + best_offset] - rising_ticks[i];
-
-            if ((period_ticks == 0U) || (high_ticks == 0U) || (high_ticks >= period_ticks))
-            {
-                continue;
-            }
-
-            high_sum += (uint64_t)high_ticks;
-            best_duty_samples++;
-        }
-    }
-
-    if (best_duty_samples > 0U)
+    if ((best_duty_samples > 0U) && (duty_period_sum > 0ULL))
     {
         avg_high_ticks = (uint32_t)((high_sum + ((uint64_t)best_duty_samples / 2ULL)) / (uint64_t)best_duty_samples);
         result_out->high_ticks_avg = avg_high_ticks;
-        result_out->duty_pct_x100 = (uint16_t)(((10000ULL * high_sum) + (period_sum / 2ULL)) / period_sum);
+        result_out->duty_pct_x100 = (uint16_t)(((10000ULL * high_sum) + (duty_period_sum / 2ULL)) / duty_period_sum);
         result_out->valid_samples = best_duty_samples;
         result_out->has_duty_cycle = true;
     }
@@ -705,6 +451,100 @@ static bool pwm_capture_drv_process_frequency_u16(const uint16_t *rising_ticks,
     result_out->period_ticks_avg = avg_period_ticks;
     result_out->valid_samples = valid_samples;
     result_out->data_valid = true;
+
+    return true;
+}
+
+static bool pwm_capture_drv_process_pwm_u32(const uint32_t *rising_ticks,
+                                            uint32_t rising_count,
+                                            const uint32_t *falling_ticks,
+                                            uint32_t falling_count,
+                                            uint32_t tick_hz,
+                                            pwm_capture_result_t *result_out)
+{
+    uint64_t period_sum;
+    uint64_t high_sum;
+    uint64_t duty_period_sum;
+    uint32_t avg_period_ticks;
+    uint32_t avg_high_ticks;
+    uint32_t i;
+    uint8_t valid_period_samples;
+    uint8_t best_duty_samples;
+
+    if ((rising_ticks == NULL) || (falling_ticks == NULL) || (result_out == NULL) || (tick_hz == 0U))
+    {
+        return false;
+    }
+
+    valid_period_samples = pwm_capture_drv_compute_period_stats_u32(rising_ticks,
+                                                                    rising_count,
+                                                                    &period_sum,
+                                                                    &avg_period_ticks);
+    if (valid_period_samples < PWM_CAPTURE_MIN_PERIOD_SAMPLES)
+    {
+        return false;
+    }
+
+    if (avg_period_ticks == 0U)
+    {
+        return false;
+    }
+
+    pwm_capture_drv_reset_result(result_out);
+    result_out->frequency_hz = (uint32_t)(((uint64_t)tick_hz + ((uint64_t)avg_period_ticks / 2ULL)) /
+                                          (uint64_t)avg_period_ticks);
+    result_out->period_ticks_avg = avg_period_ticks;
+    result_out->valid_samples = valid_period_samples;
+    result_out->data_valid = true;
+
+    high_sum = 0ULL;
+    duty_period_sum = 0ULL;
+    best_duty_samples = 0U;
+    for (i = 0U; (i + 1U) < rising_count; ++i)
+    {
+        uint32_t period_ticks;
+        uint32_t best_high_ticks;
+        uint32_t fall_index;
+        bool matched_fall;
+
+        period_ticks = rising_ticks[i + 1U] - rising_ticks[i];
+        if (period_ticks == 0U)
+        {
+            continue;
+        }
+
+        best_high_ticks = period_ticks;
+        matched_fall = false;
+        for (fall_index = 0U; fall_index < falling_count; ++fall_index)
+        {
+            uint32_t high_ticks;
+
+            high_ticks = falling_ticks[fall_index] - rising_ticks[i];
+            if ((high_ticks != 0U) && (high_ticks < best_high_ticks))
+            {
+                best_high_ticks = high_ticks;
+                matched_fall = true;
+            }
+        }
+
+        if (!matched_fall)
+        {
+            continue;
+        }
+
+        high_sum += (uint64_t)best_high_ticks;
+        duty_period_sum += (uint64_t)period_ticks;
+        best_duty_samples++;
+    }
+
+    if ((best_duty_samples > 0U) && (duty_period_sum > 0ULL))
+    {
+        avg_high_ticks = (uint32_t)((high_sum + ((uint64_t)best_duty_samples / 2ULL)) / (uint64_t)best_duty_samples);
+        result_out->high_ticks_avg = avg_high_ticks;
+        result_out->duty_pct_x100 = (uint16_t)(((10000ULL * high_sum) + (duty_period_sum / 2ULL)) / duty_period_sum);
+        result_out->valid_samples = best_duty_samples;
+        result_out->has_duty_cycle = true;
+    }
 
     return true;
 }

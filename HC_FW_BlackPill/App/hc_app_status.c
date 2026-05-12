@@ -7,6 +7,9 @@
 #include "hc_datetime.h"
 #include "pwm_capture_drv.h"
 
+#define HC_APP_ISUPPLY_SCALE_NUMERATOR   (367L)
+#define HC_APP_ISUPPLY_SCALE_DENOMINATOR (1000L)
+
 static hc_app_status_t s_hc_app_status;
 
 static const char *const s_hc_app_state_strings[] = {
@@ -59,6 +62,21 @@ static int32_t hc_app_ratio_x100_to_pct(uint16_t ratio_x100)
     return (int32_t)((ratio_x100 + 50U) / 100U);
 }
 
+static int32_t hc_app_calculate_isupply_ma(int32_t vsupply_mv, int32_t vshunt_mv)
+{
+    int32_t shunt_mv;
+
+    if ((vsupply_mv < 0) || (vshunt_mv < 0) || (vsupply_mv < vshunt_mv))
+    {
+        return -1;
+    }
+
+    shunt_mv = vsupply_mv - vshunt_mv;
+    return (int32_t)(((int64_t)shunt_mv * HC_APP_ISUPPLY_SCALE_NUMERATOR +
+                      (HC_APP_ISUPPLY_SCALE_DENOMINATOR / 2L)) /
+                     HC_APP_ISUPPLY_SCALE_DENOMINATOR);
+}
+
 void hc_app_status_init(void)
 {
     s_hc_app_status.HcId = 1U;
@@ -82,7 +100,6 @@ void hc_app_status_init(void)
     s_hc_app_status.Lt8316.State = HC_DUT_STATE_NORMAL;
     s_hc_app_status.Lt8316.PowerEnabled = false;
     s_hc_app_status.Lt8316.GateFreq_Hz = -1;
-    s_hc_app_status.Lt8316.GateRatio_Pct = -1;
     s_hc_app_status.Lt8316.GateAnlg_mV = -1;
     s_hc_app_status.Lt8316.VOut_mV = -1;
     hc_app_fault_summary_init(&s_hc_app_status.Lt8316.Faults);
@@ -105,6 +122,8 @@ void hc_app_status_refresh_from_bsp(void)
     s_hc_app_status.Ltc3901.State = hc_app_dut_state_from_power_enabled(s_hc_app_status.Ltc3901.PowerEnabled);
     s_hc_app_status.Ltc3901.VSupply_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_VUPSTREAM);
     s_hc_app_status.Ltc3901.VShunt_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_VCC);
+    s_hc_app_status.Ltc3901.ISupply_mA = hc_app_calculate_isupply_ma(s_hc_app_status.Ltc3901.VSupply_mV,
+                                                                     s_hc_app_status.Ltc3901.VShunt_mV);
     s_hc_app_status.Ltc3901.MeAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_ME_ANLG);
     s_hc_app_status.Ltc3901.MfAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_MF_ANLG);
     if (pwm_capture_drv_get_result(PWM_CAPTURE_SIGNAL_LTC3901_ME, &capture_result))
@@ -138,13 +157,10 @@ void hc_app_status_refresh_from_bsp(void)
     if (pwm_capture_drv_get_result(PWM_CAPTURE_SIGNAL_LT8316_GATE, &capture_result))
     {
         s_hc_app_status.Lt8316.GateFreq_Hz = (int32_t)capture_result.frequency_hz;
-        s_hc_app_status.Lt8316.GateRatio_Pct = capture_result.has_duty_cycle ?
-                                               hc_app_ratio_x100_to_pct(capture_result.duty_pct_x100) : -1;
     }
     else
     {
         s_hc_app_status.Lt8316.GateFreq_Hz = -1;
-        s_hc_app_status.Lt8316.GateRatio_Pct = -1;
     }
 }
 
@@ -171,7 +187,6 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
     char ltc3901_mf_ratio[16];
     char ltc3901_mf_anlg[16];
     char lt8316_gate_freq[16];
-    char lt8316_gate_ratio[16];
     char lt8316_gate_anlg[16];
     char lt8316_vout[16];
     int written;
@@ -197,14 +212,13 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
     hc_app_format_json_int_or_null(ltc3901_mf_ratio, sizeof(ltc3901_mf_ratio), status->Ltc3901.MfRatio_Pct);
     hc_app_format_json_int_or_null(ltc3901_mf_anlg, sizeof(ltc3901_mf_anlg), status->Ltc3901.MfAnlg_mV);
     hc_app_format_json_int_or_null(lt8316_gate_freq, sizeof(lt8316_gate_freq), status->Lt8316.GateFreq_Hz);
-    hc_app_format_json_int_or_null(lt8316_gate_ratio, sizeof(lt8316_gate_ratio), status->Lt8316.GateRatio_Pct);
     hc_app_format_json_int_or_null(lt8316_gate_anlg, sizeof(lt8316_gate_anlg), status->Lt8316.GateAnlg_mV);
     hc_app_format_json_int_or_null(lt8316_vout, sizeof(lt8316_vout), status->Lt8316.VOut_mV);
 
     written = snprintf(
         buffer,
         buffer_len,
-        "{\"type\":\"STS\",\"hc_id\":%u,\"ts\":\"%s\",\"state\":\"%s\",\"beam_on\":%s,\"duts\":{\"LTC3901\":{\"state\":\"%s\",\"pwr_en\":%s,\"sync\":%s,\"vsupply\":%s,\"vshunt\":%s,\"isupply\":%s,\"me_freq\":%s,\"me_ratio\":%s,\"me_anlg\":%s,\"mf_freq\":%s,\"mf_ratio\":%s,\"mf_anlg\":%s,\"faults\":{\"count\":%lu,\"summary\":\"%s\",\"ids\":%s}},\"LT8316\":{\"state\":\"%s\",\"pwr_en\":%s,\"gate_freq\":%s,\"gate_ratio\":%s,\"gate_anlg\":%s,\"vout\":%s,\"faults\":{\"count\":%lu,\"summary\":\"%s\",\"ids\":%s}}}}",
+        "{\"type\":\"STS\",\"hc_id\":%u,\"ts\":\"%s\",\"state\":\"%s\",\"beam_on\":%s,\"duts\":{\"LTC3901\":{\"state\":\"%s\",\"pwr_en\":%s,\"sync\":%s,\"vsupply\":%s,\"vshunt\":%s,\"isupply\":%s,\"me_freq\":%s,\"me_ratio\":%s,\"me_anlg\":%s,\"mf_freq\":%s,\"mf_ratio\":%s,\"mf_anlg\":%s,\"faults\":{\"count\":%lu,\"summary\":\"%s\",\"ids\":%s}},\"LT8316\":{\"state\":\"%s\",\"pwr_en\":%s,\"gate_freq\":%s,\"gate_anlg\":%s,\"vout\":%s,\"faults\":{\"count\":%lu,\"summary\":\"%s\",\"ids\":%s}}}}",
         (unsigned int)status->HcId,
         ts,
         hc_app_state_to_string(status->State),
@@ -227,7 +241,6 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
         hc_dut_state_to_string(status->Lt8316.State),
         status->Lt8316.PowerEnabled ? "true" : "false",
         lt8316_gate_freq,
-        lt8316_gate_ratio,
         lt8316_gate_anlg,
         lt8316_vout,
         (unsigned long)status->Lt8316.Faults.Count,
