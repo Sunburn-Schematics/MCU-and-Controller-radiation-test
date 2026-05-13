@@ -22,29 +22,9 @@ typedef enum
 #undef X
 } hc_app_state_t;
 
-#define HC_DUT_STATE_TABLE(X) \
-    X(HC_DUT_STATE_NORMAL,    "NORMAL") \
-    X(HC_DUT_STATE_RECOVERED, "RECOVERED") \
-    X(HC_DUT_STATE_ISOLATED,  "ISOLATED") \
-    X(HC_DUT_STATE_FAULT,     "FAULT")
-
-typedef enum
-{
-#define X(name, str) name,
-    HC_DUT_STATE_TABLE(X)
-#undef X
-} hc_dut_state_t;
-
 typedef struct
 {
-    uint32_t Count;
-    const char *Summary;
-    const char *IdsJson;
-} hc_fault_summary_t;
-
-typedef struct
-{
-    hc_dut_state_t State;
+    const char *ManagerState;
     bool PowerEnabled;
     bool SyncEnabled;
     int32_t VSupply_mV;
@@ -56,17 +36,15 @@ typedef struct
     int32_t MfFreq_Hz;
     int32_t MfRatio_Pct;
     int32_t MfAnlg_mV;
-    hc_fault_summary_t Faults;
 } hc_app_ltc3901_status_t;
 
 typedef struct
 {
-    hc_dut_state_t State;
+    const char *ManagerState;
     bool PowerEnabled;
     int32_t GateFreq_Hz;
     int32_t GateAnlg_mV;
     int32_t VOut_mV;
-    hc_fault_summary_t Faults;
 } hc_app_lt8316_status_t;
 
 typedef struct
@@ -80,12 +58,14 @@ typedef struct
 
 void hc_app_status_init(void);
 void hc_app_status_refresh_from_bsp(void);
+void hc_app_status_set_ltc3901_manager_state(const char *manager_state,
+                                             bool sync_enabled);
+void hc_app_status_set_lt8316_manager_state(const char *manager_state);
 hc_app_status_t *hc_app_status_get(void);
 const hc_app_status_t *hc_app_status_get_const(void);
 bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len);
 
 const char *hc_app_state_to_string(hc_app_state_t state);
-const char *hc_dut_state_to_string(hc_dut_state_t state);
 
 #ifdef __cplusplus
 }

@@ -7,20 +7,18 @@
 #include "hc_datetime.h"
 #include "pwm_capture_drv.h"
 
-#define HC_APP_ISUPPLY_SCALE_NUMERATOR   (367L)
-#define HC_APP_ISUPPLY_SCALE_DENOMINATOR (1000L)
+#define HC_APP_ISUPPLY_SHUNT_OHMS (10L)
 
 static hc_app_status_t s_hc_app_status;
+static bool s_ltc3901_manager_state_valid;
+static const char *s_ltc3901_manager_state_name;
+static bool s_ltc3901_manager_sync_enabled;
+static bool s_lt8316_manager_state_valid;
+static const char *s_lt8316_manager_state_name;
 
 static const char *const s_hc_app_state_strings[] = {
 #define X(name, str) str,
     HC_APP_STATE_TABLE(X)
-#undef X
-};
-
-static const char *const s_hc_dut_state_strings[] = {
-#define X(name, str) str,
-    HC_DUT_STATE_TABLE(X)
 #undef X
 };
 
@@ -40,23 +38,6 @@ static void hc_app_format_json_int_or_null(char *buffer, size_t buffer_size, int
     (void)snprintf(buffer, buffer_size, "%ld", (long)value);
 }
 
-static void hc_app_fault_summary_init(hc_fault_summary_t *faults)
-{
-    if (faults == 0)
-    {
-        return;
-    }
-
-    faults->Count = 0U;
-    faults->Summary = "NONE";
-    faults->IdsJson = "[]";
-}
-
-static hc_dut_state_t hc_app_dut_state_from_power_enabled(bool power_enabled)
-{
-    return power_enabled ? HC_DUT_STATE_NORMAL : HC_DUT_STATE_ISOLATED;
-}
-
 static int32_t hc_app_ratio_x100_to_pct(uint16_t ratio_x100)
 {
     return (int32_t)((ratio_x100 + 50U) / 100U);
@@ -72,9 +53,21 @@ static int32_t hc_app_calculate_isupply_ma(int32_t vsupply_mv, int32_t vshunt_mv
     }
 
     shunt_mv = vsupply_mv - vshunt_mv;
-    return (int32_t)(((int64_t)shunt_mv * HC_APP_ISUPPLY_SCALE_NUMERATOR +
-                      (HC_APP_ISUPPLY_SCALE_DENOMINATOR / 2L)) /
-                     HC_APP_ISUPPLY_SCALE_DENOMINATOR);
+    return (int32_t)(((int64_t)shunt_mv +
+                      (HC_APP_ISUPPLY_SHUNT_OHMS / 2L)) /
+                     HC_APP_ISUPPLY_SHUNT_OHMS);
+}
+
+static int32_t hc_app_get_adc_engineering_or_pin_mv(adc_sense_channel_t channel)
+{
+    int32_t engineering_value;
+
+    if (adc_sense_drv_get_channel_engineering_units(channel, &engineering_value))
+    {
+        return engineering_value;
+    }
+
+    return adc_sense_drv_get_channel_millivolts(channel);
 }
 
 void hc_app_status_init(void)
@@ -83,7 +76,7 @@ void hc_app_status_init(void)
     s_hc_app_status.State = HC_APP_STATE_NORMAL;
     s_hc_app_status.BeamOn = false;
 
-    s_hc_app_status.Ltc3901.State = HC_DUT_STATE_NORMAL;
+    s_hc_app_status.Ltc3901.ManagerState = "RESET";
     s_hc_app_status.Ltc3901.PowerEnabled = false;
     s_hc_app_status.Ltc3901.SyncEnabled = true;
     s_hc_app_status.Ltc3901.VSupply_mV = -1;
@@ -95,14 +88,18 @@ void hc_app_status_init(void)
     s_hc_app_status.Ltc3901.MfFreq_Hz = -1;
     s_hc_app_status.Ltc3901.MfRatio_Pct = -1;
     s_hc_app_status.Ltc3901.MfAnlg_mV = -1;
-    hc_app_fault_summary_init(&s_hc_app_status.Ltc3901.Faults);
 
-    s_hc_app_status.Lt8316.State = HC_DUT_STATE_NORMAL;
+    s_hc_app_status.Lt8316.ManagerState = "RESET";
     s_hc_app_status.Lt8316.PowerEnabled = false;
     s_hc_app_status.Lt8316.GateFreq_Hz = -1;
     s_hc_app_status.Lt8316.GateAnlg_mV = -1;
     s_hc_app_status.Lt8316.VOut_mV = -1;
-    hc_app_fault_summary_init(&s_hc_app_status.Lt8316.Faults);
+
+    s_ltc3901_manager_state_valid = false;
+    s_ltc3901_manager_state_name = "RESET";
+    s_ltc3901_manager_sync_enabled = false;
+    s_lt8316_manager_state_valid = false;
+    s_lt8316_manager_state_name = "RESET";
 
     hc_app_status_refresh_from_bsp();
 }
@@ -118,10 +115,18 @@ void hc_app_status_refresh_from_bsp(void)
     s_hc_app_status.BeamOn = bsp_status.beam_on;
 
     s_hc_app_status.Ltc3901.PowerEnabled = bsp_power_is_enabled(BSP_POWER_LTC3901);
-    s_hc_app_status.Ltc3901.SyncEnabled = true;
-    s_hc_app_status.Ltc3901.State = hc_app_dut_state_from_power_enabled(s_hc_app_status.Ltc3901.PowerEnabled);
-    s_hc_app_status.Ltc3901.VSupply_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_VUPSTREAM);
-    s_hc_app_status.Ltc3901.VShunt_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_VCC);
+    if (s_ltc3901_manager_state_valid)
+    {
+        s_hc_app_status.Ltc3901.ManagerState = s_ltc3901_manager_state_name;
+        s_hc_app_status.Ltc3901.SyncEnabled = s_ltc3901_manager_sync_enabled;
+    }
+    else
+    {
+        s_hc_app_status.Ltc3901.ManagerState = "UNMANAGED";
+        s_hc_app_status.Ltc3901.SyncEnabled = false;
+    }
+    s_hc_app_status.Ltc3901.VSupply_mV = hc_app_get_adc_engineering_or_pin_mv(ADC_SENSE_CHANNEL_VUPSTREAM);
+    s_hc_app_status.Ltc3901.VShunt_mV = hc_app_get_adc_engineering_or_pin_mv(ADC_SENSE_CHANNEL_LTC3901_VCC);
     s_hc_app_status.Ltc3901.ISupply_mA = hc_app_calculate_isupply_ma(s_hc_app_status.Ltc3901.VSupply_mV,
                                                                      s_hc_app_status.Ltc3901.VShunt_mV);
     s_hc_app_status.Ltc3901.MeAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LTC3901_ME_ANLG);
@@ -151,7 +156,14 @@ void hc_app_status_refresh_from_bsp(void)
     }
 
     s_hc_app_status.Lt8316.PowerEnabled = bsp_power_is_enabled(BSP_POWER_LT8316);
-    s_hc_app_status.Lt8316.State = hc_app_dut_state_from_power_enabled(s_hc_app_status.Lt8316.PowerEnabled);
+    if (s_lt8316_manager_state_valid)
+    {
+        s_hc_app_status.Lt8316.ManagerState = s_lt8316_manager_state_name;
+    }
+    else
+    {
+        s_hc_app_status.Lt8316.ManagerState = "UNMANAGED";
+    }
     s_hc_app_status.Lt8316.GateAnlg_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LT8316_GATE_ANLG);
     s_hc_app_status.Lt8316.VOut_mV = adc_sense_drv_get_channel_millivolts(ADC_SENSE_CHANNEL_LT8316_VOUT);
     if (pwm_capture_drv_get_result(PWM_CAPTURE_SIGNAL_LT8316_GATE, &capture_result))
@@ -162,6 +174,37 @@ void hc_app_status_refresh_from_bsp(void)
     {
         s_hc_app_status.Lt8316.GateFreq_Hz = -1;
     }
+}
+
+void hc_app_status_set_ltc3901_manager_state(const char *manager_state,
+                                             bool sync_enabled)
+{
+    if (manager_state == 0)
+    {
+        manager_state = "RESET";
+    }
+
+    s_ltc3901_manager_state_valid = true;
+    s_ltc3901_manager_state_name = manager_state;
+    s_ltc3901_manager_sync_enabled = sync_enabled;
+
+    s_hc_app_status.Ltc3901.ManagerState = manager_state;
+    s_hc_app_status.Ltc3901.PowerEnabled = bsp_power_is_enabled(BSP_POWER_LTC3901);
+    s_hc_app_status.Ltc3901.SyncEnabled = sync_enabled;
+}
+
+void hc_app_status_set_lt8316_manager_state(const char *manager_state)
+{
+    if (manager_state == 0)
+    {
+        manager_state = "RESET";
+    }
+
+    s_lt8316_manager_state_valid = true;
+    s_lt8316_manager_state_name = manager_state;
+
+    s_hc_app_status.Lt8316.ManagerState = manager_state;
+    s_hc_app_status.Lt8316.PowerEnabled = bsp_power_is_enabled(BSP_POWER_LT8316);
 }
 
 hc_app_status_t *hc_app_status_get(void)
@@ -218,12 +261,12 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
     written = snprintf(
         buffer,
         buffer_len,
-        "{\"type\":\"STS\",\"hc_id\":%u,\"ts\":\"%s\",\"state\":\"%s\",\"beam_on\":%s,\"duts\":{\"LTC3901\":{\"state\":\"%s\",\"pwr_en\":%s,\"sync\":%s,\"vsupply\":%s,\"vshunt\":%s,\"isupply\":%s,\"me_freq\":%s,\"me_ratio\":%s,\"me_anlg\":%s,\"mf_freq\":%s,\"mf_ratio\":%s,\"mf_anlg\":%s,\"faults\":{\"count\":%lu,\"summary\":\"%s\",\"ids\":%s}},\"LT8316\":{\"state\":\"%s\",\"pwr_en\":%s,\"gate_freq\":%s,\"gate_anlg\":%s,\"vout\":%s,\"faults\":{\"count\":%lu,\"summary\":\"%s\",\"ids\":%s}}}}",
+        "{\"type\":\"STS\",\"hc_id\":%u,\"ts\":\"%s\",\"state\":\"%s\",\"beam_on\":%s,\"duts\":{\"LTC3901\":{\"state\":\"%s\",\"pwr_en\":%s,\"sync\":%s,\"vsupply\":%s,\"vshunt\":%s,\"isupply\":%s,\"me_freq\":%s,\"me_ratio\":%s,\"me_anlg\":%s,\"mf_freq\":%s,\"mf_ratio\":%s,\"mf_anlg\":%s},\"LT8316\":{\"state\":\"%s\",\"pwr_en\":%s,\"gate_freq\":%s,\"gate_anlg\":%s,\"vout\":%s}}}",
         (unsigned int)status->HcId,
         ts,
         hc_app_state_to_string(status->State),
         status->BeamOn ? "true" : "false",
-        hc_dut_state_to_string(status->Ltc3901.State),
+        status->Ltc3901.ManagerState,
         status->Ltc3901.PowerEnabled ? "true" : "false",
         status->Ltc3901.SyncEnabled ? "true" : "false",
         ltc3901_vsupply,
@@ -235,17 +278,11 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
         ltc3901_mf_freq,
         ltc3901_mf_ratio,
         ltc3901_mf_anlg,
-        (unsigned long)status->Ltc3901.Faults.Count,
-        status->Ltc3901.Faults.Summary,
-        status->Ltc3901.Faults.IdsJson,
-        hc_dut_state_to_string(status->Lt8316.State),
+        status->Lt8316.ManagerState,
         status->Lt8316.PowerEnabled ? "true" : "false",
         lt8316_gate_freq,
         lt8316_gate_anlg,
-        lt8316_vout,
-        (unsigned long)status->Lt8316.Faults.Count,
-        status->Lt8316.Faults.Summary,
-        status->Lt8316.Faults.IdsJson);
+        lt8316_vout);
 
     return (written >= 0) && ((size_t)written < buffer_len);
 }
@@ -258,14 +295,4 @@ const char *hc_app_state_to_string(hc_app_state_t state)
     }
 
     return s_hc_app_state_strings[state];
-}
-
-const char *hc_dut_state_to_string(hc_dut_state_t state)
-{
-    if (((unsigned int)state) >= (sizeof(s_hc_dut_state_strings) / sizeof(s_hc_dut_state_strings[0])))
-    {
-        return "FAULT";
-    }
-
-    return s_hc_dut_state_strings[state];
 }

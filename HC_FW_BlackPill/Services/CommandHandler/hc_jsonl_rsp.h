@@ -38,6 +38,31 @@ bool hc_jsonl_rsp_build_set_adc_cal_ok(char *out,
                                        int32_t slope_scaled,
                                        int32_t offset,
                                        bool valid);
+bool hc_jsonl_rsp_build_set_ltc3901_cmd_ok(char *out,
+                                           size_t out_size,
+                                           uint32_t hc_id,
+                                           uint32_t msg,
+                                           const char *ts,
+                                           const char *command);
+bool hc_jsonl_rsp_build_set_lt8316_cmd_ok(char *out,
+                                          size_t out_size,
+                                          uint32_t hc_id,
+                                          uint32_t msg,
+                                          const char *ts,
+                                          const char *command);
+bool hc_jsonl_rsp_build_set_manager_cmds_ok(char *out,
+                                            size_t out_size,
+                                            uint32_t hc_id,
+                                            uint32_t msg,
+                                            const char *ts,
+                                            const char *ltc3901_command,
+                                            const char *lt8316_command);
+bool hc_jsonl_rsp_build_set_args_ok(char *out,
+                                    size_t out_size,
+                                    uint32_t hc_id,
+                                    uint32_t msg,
+                                    const char *ts,
+                                    const char *args_json);
 bool hc_jsonl_rsp_build_set_digital_signals_ok(char *out,
                                                size_t out_size,
                                                uint8_t hc_id,
@@ -50,6 +75,13 @@ bool hc_jsonl_rsp_build_get_datetime_ok(char *out,
                                         uint32_t msg,
                                         const char *ts,
                                         const char *date_time);
+
+bool hc_jsonl_rsp_build_get_sw_version_ok(char *out,
+                                          size_t out_size,
+                                          uint32_t hc_id,
+                                          uint32_t msg,
+                                          const char *ts,
+                                          const char *sw_version);
 
 bool hc_jsonl_rsp_build_get_debug_config_ok(char *out,
                                             size_t out_size,
@@ -93,6 +125,12 @@ bool hc_jsonl_rsp_build_error(char *out,
                               const char *ts,
                               const char *code,
                               const char *message);
+
+bool hc_jsonl_rsp_build_event_msg(char *out,
+                                  size_t out_size,
+                                  uint32_t hc_id,
+                                  const char *ts,
+                                  const char *message);
 
 #ifdef __cplusplus
 }

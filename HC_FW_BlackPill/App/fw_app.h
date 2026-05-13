@@ -11,9 +11,28 @@ extern "C" {
 #include "hc_debug_telemetry.h"
 #include "usb_vcp_drv.h"
 
+#ifndef SW_VERSION_STRING
+#define SW_VERSION_STRING "0.1.0"
+#endif
+
+typedef enum
+{
+    FW_APP_LTC3901_COMMAND_RUN = 0,
+    FW_APP_LTC3901_COMMAND_HALT,
+    FW_APP_LTC3901_COMMAND_RESET,
+} fw_app_ltc3901_command_t;
+
+typedef enum
+{
+    FW_APP_LT8316_COMMAND_RUN = 0,
+    FW_APP_LT8316_COMMAND_RESET,
+} fw_app_lt8316_command_t;
 
 void fw_app_init(void);
 void fw_app_run(void);
+bool fw_app_set_ltc3901_command(fw_app_ltc3901_command_t command);
+bool fw_app_set_lt8316_command(fw_app_lt8316_command_t command);
+const char *fw_app_get_sw_version(void);
 bool fw_app_set_sts_period_ms(uint32_t period_ms);
 uint32_t fw_app_get_sts_period_ms(void);
 bool fw_app_set_debug_config(const hc_debug_telemetry_config_t *config);

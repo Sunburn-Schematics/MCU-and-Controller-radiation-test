@@ -17,13 +17,23 @@ The project is split into these layers:
 5. **Application**
    - `App/`
 
-## Dependency direction
+## Current Dependency Shape
+
+The intended architectural direction remains:
 
 ```text
 App -> Services -> Drivers_Local -> Bsp -> HAL/Cube
 ```
 
-Do not reverse this dependency direction.
+The current implementation has one deliberate command-facing exception: the JSONL command handler in `Services/CommandHandler` calls the `fw_app_*` application facade to apply user requests and query application-owned debug/status behavior. This keeps command parsing in Services while leaving hardware policy in App.
+
+Current high-level source dependencies are:
+
+- `Core/Src/main.c` captures reset reason during early user init, initializes CubeMX peripherals, calls `fw_app_init()` once, and calls `fw_app_run()` from the infinite loop.
+- `App/fw_app.c` coordinates BSP, ADC, PWM capture, USB-VCP, command processing, debug telemetry, status formatting, sync generation, and the DUT-local managers.
+- `Services/CommandHandler` parses JSONL commands and calls `fw_app_*` facade functions for application-owned settings.
+- `Drivers_Local` owns HAL-backed ADC, PWM capture, RTC, reset-reason, sync, and USB-VCP wrappers.
+- `Bsp/bsp_board.*` owns named board GPIO controls and board status reads.
 
 ## Execution model
 
@@ -33,11 +43,37 @@ The firmware currently uses a simple superloop:
 2. `fw_app_init()` performs user-owned startup.
 3. `fw_app_run()` is called repeatedly from the infinite loop.
 
-## Current placeholder behavior
+Current `fw_app_run()` order is:
 
-The application currently toggles the blue LED through the BSP heartbeat path.
+1. service ADC acquisition
+2. service USB-VCP RX/TX
+3. service PWM capture bursts
+4. process JSONL commands
+5. refresh the application status snapshot from BSP/ADC/PWM sources
+6. run the LTC3901 manager and apply its output intents
+7. run the LT8316 manager and apply its output intents
+8. service debug telemetry
+9. toggle the blue heartbeat LED when due
+10. emit periodic `STS` when due
+11. delay for 10 ms
 
-This preserves simple observable behavior while validating the first custom software layer.
+The firmware is cooperative and non-RTOS. ADC and PWM DMA callbacks only mark completion/error state; processing and rearming are performed from the superloop.
+
+## Current Application Behavior
+
+The application currently:
+
+- applies BSP safe state during startup
+- initializes ADC, PWM capture, USB-VCP, command processing, debug telemetry, status reporting, and sync generation
+- configures the sync timer but leaves sync disabled until the LTC3901 manager enables it
+- periodically toggles the blue LED as a heartbeat
+- continuously captures ADC and PWM measurements
+- accepts JSONL `GET` / `SET` commands over USB-VCP
+- emits asynchronous JSONL `EVT` records for manager events
+- emits periodic JSONL `STS` records at a configurable interval
+- runs the LTC3901 manager as the owner of LTC3901 power and sync policy
+- runs the LT8316 manager as the owner of LT8316 HV power policy
+- can optionally auto-issue one `RUN` request to each DUT manager after startup when compile-time `AUTOSTART_ENABLE` is non-zero
 
 ## Coding rules
 
@@ -156,18 +192,16 @@ This layer should encapsulate peripheral-function behavior using product-level c
 - A driver may report invalid data, timeout, or missing signal; it should not decide that a fault must latch or that the board must enter safe state.
 - Keep the public API stable even if the STM32 peripheral instance changes later.
 
-### Recommended Drivers_Local modules
+### Current Drivers_Local modules
 
-The preferred initial `Drivers_Local` partition is:
+The current `Drivers_Local` partition is:
 
 - `Drivers_Local/adc_sense_drv.*`
 - `Drivers_Local/pwm_capture_drv.*`
 - `Drivers_Local/sync_drv.*`
-
-Optional transport wrappers may be added later if needed:
-
-- `Drivers_Local/debug_uart_drv.*`
-- `Drivers_Local/usb_cdc_drv.*`
+- `Drivers_Local/rtc_drv.*`
+- `Drivers_Local/reset_reason_drv.*`
+- `Drivers_Local/usb_vcp_drv.*`
 
 ### Drivers_Local module intent
 
@@ -189,7 +223,9 @@ Responsibilities:
 - provide stable channel enumeration
 - return raw counts, nominal millivolts, and optional per-channel engineering-unit conversion using `y = mx + c`
 
-`hc_app_status` derives the `STS` `isupply` field from the ADC driver outputs as `(VUpstream_Anlg - LTC3901_Vcc_Anlg) * 0.367`, reported in milliamps after fixed-point rounding. If either source voltage is invalid, or the computed shunt voltage would be negative, `isupply` is reported as unavailable.
+`hc_app_status` publishes `STS` `vsupply` and `vshunt` from the ADC engineering-unit path for `VUpstream_Anlg` and `LTC3901_Vcc_Anlg` when those channel calibrations are valid. If an engineering calibration is not valid, it falls back to nominal pin-level millivolts. It derives the `STS` `isupply` field from those published values as `(vsupply - vshunt) / 10 ohms`, reported in milliamps after fixed-point rounding. If either source voltage is invalid, or the computed shunt voltage would be negative, `isupply` is reported as unavailable.
+
+The default ADC engineering calibration for `VUpstream_Anlg` and `LTC3901_Vcc_Anlg` assumes a 100 k high-side / 37.4 k low-side resistor divider. The default conversion scales raw ADC counts directly to circuit sense-point millivolts using a divider multiplier of approximately 3.6738.
 
 #### `pwm_capture_drv.*`
 Owns timer-based measurement for:
@@ -223,24 +259,126 @@ Owns synchronized output generation for:
 
 Responsibilities:
 
-- validate synchronized square-wave generation requests
-- generate a 50% duty-cycle SDRA waveform at the requested base frequency
-- generate a 50% duty-cycle SDRB waveform delayed relative to SDRA
-- convert requested frequency and delay values into timer realization
+- configure TIM3 output-compare toggle generation for SDRA/SDRB using raw timer values
+- force SDRA/SDRB inactive while applying a new raw timer configuration
 - enable and disable the synchronized outputs
 - hide timer output implementation details from upper layers
 
 Public API model:
 
-- one shared `frequency_hz`
-- one `sdrb_delay_ns` relative to SDRA
+- `sync_drv_raw_config_t.ARR` sets the TIM3 auto-reload value
+- `sync_drv_raw_config_t.CCR2` sets the SDRB channel compare value
+- SDRA uses channel 1 with compare value `0`
+- `sync_drv_configure()` applies the raw configuration and leaves the outputs disabled
+- `sync_drv_enable()` / `sync_drv_disable()` start and stop both output channels
+- `sync_drv_configure_and_enable()` exists, but `fw_app_init()` currently uses `sync_drv_configure()` so startup does not enable sync automatically
 
 Design rules:
 
-- SDRA is the reference waveform.
-- SDRB uses the same base frequency and 50% duty cycle as SDRA.
-- SDRB timing is defined only by its delay relative to SDRA.
-- Invalid or unrealizable requests must be rejected by the driver.
+- SDRA is the reference toggle waveform.
+- SDRB uses the same timer period and toggles at the configured `CCR2` offset.
+- `ARR` must be greater than `CCR2`.
+- Higher layers own when sync is enabled. The current LTC3901 manager is the application owner of sync enable/disable policy.
+
+#### `rtc_drv.*`
+
+`rtc_drv.*` owns validation and HAL access for RTC date/time values.
+
+#### `reset_reason_drv.*`
+
+`reset_reason_drv.*` captures RCC reset flags into a local summary and clears the hardware flags after capture. The current API exposes whether reset-reason capture is initialized and whether specific reset flags were present.
+
+#### `usb_vcp_drv.*`
+
+`usb_vcp_drv.*` wraps the USB CDC interface with RX/TX ring-buffer handling. `command_processor_task()` consumes bytes from this driver and `hc_comms_tx_send_line()` sends JSONL output through it.
+
+## Application Modules
+
+### `fw_app.*`
+
+`fw_app.c` is the current top-level application coordinator. It owns:
+
+- superloop task ordering
+- heartbeat and periodic status timing
+- compile-time autostart policy using `AUTOSTART_ENABLE` and `AUTOSTART_DELAY_MS`
+- LTC3901 and LT8316 manager instances, one-shot request storage, and provisional manager configuration constants
+- mapping manager output intents to `bsp_power_write()` and `sync_drv_enable()` / `sync_drv_disable()`
+- debug facade functions used by the JSONL command handler
+
+When autostart is enabled, `fw_app.c` waits `AUTOSTART_DELAY_MS` after `fw_app_init()` and then issues a single `RUN` request to each DUT manager that is still in `RESET` and does not already have a pending external request. Autostart is one-shot per boot; later `RESET` or `HALT` commands do not retrigger it.
+
+### `hc_app_status.*`
+
+`hc_app_status` owns the application status snapshot and `STS` JSON formatting. It refreshes live fields from BSP, ADC, and PWM capture drivers, including:
+
+- board ID and BeamOn
+- LTC3901 and LT8316 power state
+- LTC3901 and LT8316 manager states as each DUT `state`
+- LTC3901 `vsupply` and `vshunt` from ADC engineering-unit calibration where valid, otherwise nominal pin-level millivolts
+- LTC3901 `isupply = (vsupply - vshunt) / 10 ohms`
+- ME/MF frequency and ratio
+- LT8316 gate frequency
+- analog millivolt fields
+
+Unavailable numeric measurements are formatted as JSON `null`.
+
+### `hc_debug_telemetry.*`
+
+`hc_debug_telemetry` owns named debug signal lookup and periodic `DBG` output formatting. It exposes ADC, PWM, board, application-state, and selected digital signals. `ltc3901.pwr_en` and `lt8316.pwr_en` remain settable as compatibility manager requests. Explicit LTC3901 control should use `SET args.ltc3901_cmd`. `sync.enable` is observable but no longer directly settable because the LTC3901 manager owns sync control.
+
+### `ltc3901_manager.*`
+
+`ltc3901_manager` owns the DUT1 LTC3901 state table and produces hardware output intents. It does not call BSP or drivers directly. `fw_app.c` supplies sampled inputs and applies outputs.
+
+External LTC3901 commands are accepted through `SET args.ltc3901_cmd`:
+
+- `RUN`: transition from the current state to `POWER_UP`, then continue through normal manager flow
+- `HALT`: transition from the current state to `HALT`; outputs are disabled and fault counters are preserved
+- `RESET`: transition from the current state to `RESET`; outputs are disabled and manager fault counters are cleared
+
+Current manager states are:
+
+- `RESET`
+- `HALT`
+- `POWER_UP`
+- `POWER_FAULT`
+- `POWERED`
+- `POWERED_SYNC_ON`
+- `POWERED_SYNC_OFF`
+- `POWERED_SYNC_FAULT`
+
+`POWERED_SYNC_OFF` keeps LTC3901 power enabled and disables only the sync outputs.
+
+### `lt8316_manager.*`
+
+`lt8316_manager` owns the DUT2 LT8316 state table and produces the HV power-enable output intent. It does not call BSP or drivers directly. `fw_app.c` supplies sampled inputs and applies outputs.
+
+External LT8316 commands are accepted through `SET args.lt8316_cmd`. The compatibility debug signal `lt8316.pwr_en` maps `true` to `RUN` and `false` to `RESET`:
+
+- `RUN`: transition from the current state to `POWERED`
+- `RESET`: transition from the current state to `RESET`; HV power is disabled and manager fault counters are cleared
+
+Current manager states are:
+
+- `RESET`
+- `FAULT`
+- `POWERED`
+
+`POWERED` asserts `HV_Pwr_En`. If the LT8316 gate frequency remains unavailable after the configured power-on stabilization time, the manager transitions to `FAULT`, disables `HV_Pwr_En`, increments its fault counter, and retries while the fault count remains below the configured limit.
+
+## Services Modules
+
+### `Services/CommandHandler`
+
+The command handler owns JSONL framing, parsing, dispatch, response formatting, and command-time validation. It supports date/time, status period, debug telemetry configuration, ADC calibration, raw/debug signal reads, and debug digital signal writes.
+
+Command handlers do not directly touch BSP or drivers. They call `fw_app_*` facade functions for application-owned behavior.
+
+`hc_datetime.*` lives in this folder and provides command/status-facing timestamp formatting and fallback handling. JSONL responses, asynchronous `EVT` output, and periodic `STS` output use the HC datetime string format `YYYYMMDD HH:MM:SS`.
+
+The firmware exposes a compile-time software version string through `GET args.sw_version:true`. The default is `SW_VERSION_STRING`, which can be overridden by the build system with a compiler definition.
+
+Manager-generated `EVT` records currently use an `args.msg` text payload prefixed with the related device name, for example `LTC3901:` or `LT8316:`. Fault messages include measurement evidence and the configured comparison value where available; retry messages include retry count and maximum retry count.
 
 ## Layer boundary examples
 
@@ -255,7 +393,7 @@ Design rules:
 
 - sample all ADC channels
 - convert a capture register set into frequency and duty-cycle data
-- configure the SDRA base frequency and SDRB delay
+- configure TIM3 raw values for SDRA/SDRB generation
 - enable or disable synchronized waveform generation
 
 ### Does not belong in BSP or Drivers_Local
@@ -265,15 +403,33 @@ Design rules:
 - format a status line for CLI or USB reporting
 - coordinate application state transitions
 
-## Planned next modules
+## Current Implementation Status
 
-Near-term architecture direction is:
+The following custom modules are currently implemented and included in the firmware build:
 
-- keep `Bsp/bsp_board.*` as the consolidated board abstraction
-- build `Drivers_Local/adc_sense_drv.*`
-- add `Drivers_Local/pwm_capture_drv.*`
-- add `Drivers_Local/sync_drv.*`
-- add Services only after the local hardware driver contracts are stable enough to support logging, CLI, telemetry, and fault management
+- `App/fw_app.*`
+- `App/hc_app_status.*`
+- `App/hc_debug_telemetry.*`
+- `App/ltc3901_manager.*`
+- `App/lt8316_manager.*`
+- `Bsp/bsp_board.*`
+- `Drivers_Local/adc_sense_drv.*`
+- `Drivers_Local/pwm_capture_drv.*`
+- `Drivers_Local/reset_reason_drv.*`
+- `Drivers_Local/rtc_drv.*`
+- `Drivers_Local/sync_drv.*`
+- `Drivers_Local/usb_vcp_drv.*`
+- `Services/CommandHandler/*`
+- `Services/RingBuffer/*`
+- `Services/jsmn/*`
+
+Near-term remaining architecture work is:
+
+- replace provisional LTC3901 and LT8316 manager timing/threshold constants with named configuration variables
+- decide whether current DUT manager `EVT` messages should gain structured event IDs, scopes, severity, or fault-manager records
+- add a centralized fault manager when fault ID ownership and latching policy are finalized
+- add non-volatile storage for ADC calibration if required
+- tighten or remove the remaining legacy `fw_app_set_sync_enable()` facade once no callers require it
 
 ## Current ADC implementation status
 
@@ -293,6 +449,7 @@ Engineering-unit conversion details:
 - each ADC channel owns an independent calibration entry
 - `Valid = false` disables engineering-unit output for that channel
 - calibration storage is currently RAM-only
+- `VUpstream_Anlg` and `LTC3901_Vcc_Anlg` default to valid engineering calibration for their 100 k / 37.4 k input dividers; clearing those channels restores the divider defaults
 
 Not yet implemented in this driver:
 

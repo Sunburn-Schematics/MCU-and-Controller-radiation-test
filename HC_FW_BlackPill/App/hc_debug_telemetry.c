@@ -524,7 +524,7 @@ static bool hc_debug_telemetry_get_ltc3901_state(hc_debug_value_t *value_out)
         return false;
     }
 
-    return hc_debug_telemetry_get_status_string(hc_dut_state_to_string(s_active_status->Ltc3901.State), value_out);
+    return hc_debug_telemetry_get_status_string(s_active_status->Ltc3901.ManagerState, value_out);
 }
 
 static bool hc_debug_telemetry_get_lt8316_state(hc_debug_value_t *value_out)
@@ -534,7 +534,7 @@ static bool hc_debug_telemetry_get_lt8316_state(hc_debug_value_t *value_out)
         return false;
     }
 
-    return hc_debug_telemetry_get_status_string(hc_dut_state_to_string(s_active_status->Lt8316.State), value_out);
+    return hc_debug_telemetry_get_status_string(s_active_status->Lt8316.ManagerState, value_out);
 }
 
 static bool hc_debug_telemetry_get_led_blue(hc_debug_value_t *value_out)

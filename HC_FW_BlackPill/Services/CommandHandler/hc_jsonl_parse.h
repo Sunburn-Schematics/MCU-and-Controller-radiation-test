@@ -48,6 +48,16 @@ typedef struct
 
 typedef struct
 {
+    char Command[8];
+} hc_jsonl_set_ltc3901_cmd_request_t;
+
+typedef struct
+{
+    char Command[8];
+} hc_jsonl_set_lt8316_cmd_request_t;
+
+typedef struct
+{
     bool Requested;
     uint32_t Channel;
 } hc_jsonl_get_adc_cal_request_t;
@@ -85,9 +95,23 @@ hc_cmd_status_t hc_jsonl_parse_set_adc_calibration(const char *line,
                                                    const hc_cmd_request_t *request,
                                                    hc_jsonl_set_adc_cal_request_t *adc_cal_request_out);
 
+hc_cmd_status_t hc_jsonl_parse_set_ltc3901_cmd(const char *line,
+                                               const jsmntok_t *tokens,
+                                               const hc_cmd_request_t *request,
+                                               hc_jsonl_set_ltc3901_cmd_request_t *cmd_request_out);
+
+hc_cmd_status_t hc_jsonl_parse_set_lt8316_cmd(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request,
+                                              hc_jsonl_set_lt8316_cmd_request_t *cmd_request_out);
+
 hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
                                              const jsmntok_t *tokens,
                                              const hc_cmd_request_t *request);
+
+hc_cmd_status_t hc_jsonl_parse_get_sw_version(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request);
 
 hc_cmd_status_t hc_jsonl_parse_get_raw_adc(const char *line,
                                            const jsmntok_t *tokens,

@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 518.5
   },
   "right": {
     "id": "ba76baa894ba84ec",
@@ -186,11 +186,25 @@
   "active": "79f6f1e3e6facd0e",
   "lastOpenFiles": [
     "JSON_Tests.md",
-    "Index.md",
+    "architecture.md",
+    "requirements/host_controller/hc_dut_monitor_functions_spec_v1.md",
+    "requirements/host_controller/hc_jsonl_command_processor_implementation_plan_v1.md",
     "Debug_Signals.md",
+    "requirements/LT8316_Monitor_STT.md",
+    "requirements/LTC3901_Monitor_STT.md",
+    "requirements/E9692D20",
+    "requirements/LT8316_Monitor_STT.xlsx",
+    "requirements/5A230D20",
+    "requirements/~$LT8316_Monitor_STT.xlsx",
+    "requirements/host_controller/ltc3901_manager_active_object_draft.c",
+    "requirements/host_controller/ltc3901_monitor_active_object_draft.c",
+    "requirements/78BDF920",
+    "requirements/BF044920",
+    "requirements/LTC3901_Monitor_STT.xlsx",
+    "requirements/~$LTC3901_Monitor_STT.xlsx",
+    "Index.md",
     "pin_connections.md",
     "requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md",
-    "tc_hc_jsonl_command_structure_preliminary_v1.md",
-    "architecture.md"
+    "tc_hc_jsonl_command_structure_preliminary_v1.md"
   ]
 }

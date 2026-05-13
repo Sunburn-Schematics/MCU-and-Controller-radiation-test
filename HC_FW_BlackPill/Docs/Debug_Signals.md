@@ -13,6 +13,7 @@ This document defines the currently supported `dbg_signals` names for:
 - Requested signals are returned in the same order they were requested after duplicate removal.
 - Unavailable values are emitted as `null`.
 - ADC `.eng` values depend on per-channel `adc_cal` configuration.
+- Periodic `STS` `vsupply` and `vshunt` use the `adc.vupstream.eng` and `adc.ltc3901_vcc.eng` values when those calibrations are valid, falling back to pin-level `.mv` values otherwise.
 - Only settable digital signals can be controlled via `SET {"dbg_signals":{...}}`; attempting to set read-only signals will result in an error.
 
 ## Types
@@ -212,15 +213,15 @@ Notes:
 | Signal           | Type     | Units | Settable | Source                     |
 | ---------------- | -------- | ----- | -------- | -------------------------- |
 | `beam_on`        | `bool`   | n/a   | No       | board BeamOn digital input |
-| `ltc3901.pwr_en` | `bool`   | n/a   | Yes      | LTC3901 power-enable state |
-| `lt8316.pwr_en`  | `bool`   | n/a   | Yes      | LT8316 power-enable state  |
+| `ltc3901.pwr_en` | `bool`   | n/a   | Yes      | LTC3901 manager power request / power-enable state |
+| `lt8316.pwr_en`  | `bool`   | n/a   | Yes      | LT8316 manager power request / power-enable state |
 | `led.blue`       | `bool`   | n/a   | Yes      | Blue LED state             |
 | `led.red`        | `bool`   | n/a   | Yes      | Red LED state              |
 | `led.green`      | `bool`   | n/a   | Yes      | Green LED state            |
-| `sync.enable`    | `bool`   | n/a   | Yes      | SYNC output enable state   |
+| `sync.enable`    | `bool`   | n/a   | No       | LTC3901 manager-owned SYNC output enable state |
 | `hc.state`       | `string` | n/a   | No       | top-level HC state         |
-| `ltc3901.state`  | `string` | n/a   | No       | LTC3901 DUT state          |
-| `lt8316.state`   | `string` | n/a   | No       | LT8316 DUT state           |
+| `ltc3901.state`  | `string` | n/a   | No       | LTC3901 manager state      |
+| `lt8316.state`   | `string` | n/a   | No       | LT8316 manager state       |
 
 JSON Example:
 
@@ -233,12 +234,21 @@ JSON Example:
 ```
 
 ```json
-{"type":"SET","msg":222,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true,"sync.enable":true}}}
+{"type":"SET","msg":222,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}}
 ```
 
 Notes:
 
-- Settable digital signals (`ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`, `sync.enable`) can be controlled using `SET` with `dbg_signals` as an object containing signal-value pairs.
+- Settable digital signals (`ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`) can be controlled using `SET` with `dbg_signals` as an object containing signal-value pairs.
+- `ltc3901.pwr_en` now sets the LTC3901 manager request; the manager owns the actual LTC3901 power and SYNC outputs.
+- `lt8316.pwr_en` now sets the LT8316 manager request; the manager owns the actual LT8316 HV power output.
+- Prefer explicit manager commands for LTC3901 control:
+  - `{"type":"SET","msg":124,"args":{"ltc3901_cmd":"RUN"}}`
+  - `{"type":"SET","msg":125,"args":{"ltc3901_cmd":"HALT"}}`
+  - `{"type":"SET","msg":126,"args":{"ltc3901_cmd":"RESET"}}`
+- Prefer explicit manager commands for LT8316 control:
+  - `{"type":"SET","msg":127,"args":{"lt8316_cmd":"RUN"}}`
+  - `{"type":"SET","msg":128,"args":{"lt8316_cmd":"RESET"}}`
 - Read-only signals (`beam_on`, `hc.state`, etc.) cannot be set and will return an error if attempted.
 
 ## Calibration Notes
@@ -257,6 +267,8 @@ Notes:
   - `vrefint`
 - `adc_cal.valid = false` disables `.eng` output for that channel and the `.eng` signal returns `null`.
 - Calibration values are currently stored in RAM only.
+- `STS` `vsupply` and `vshunt` are expected to represent circuit sense-point millivolts. Configure `vupstream` and `ltc3901_vcc` calibration so their `.eng` values include the external divider/gain from ADC pin voltage back to the circuit sense point.
+- `vupstream` and `ltc3901_vcc` default to a 100 k high-side / 37.4 k low-side divider scale factor. This gives a default multiplier of approximately `3.6738` from ADC pin voltage to circuit sense-point voltage, or `slope_scaled = 2960569` in the raw-count engineering conversion.
 
 
 ## Common Startup Pattern for Debugging
@@ -272,7 +284,7 @@ Enable Debug
 
 {"type":"SET","msg":222,"args":{"dbg_signals":{"led.red":true}}}
 
-{"type":"SET","msg":222,"args":{"dbg_signals":{"ltc3901.pwr_en":true}}}
+{"type":"SET","msg":222,"args":{"ltc3901_cmd":"RUN"}}
 ```
 
 
@@ -280,15 +292,14 @@ Enable Debug
 Explanation:
 1. Disable Periodic Status Messages
 2. Enable periodic Debug Messages to display key LTC3901 values.
-3. Enable power to the LTC3901
-4. Enable the Sync Signal to the LTC3901
+3. Request LTC3901 manager power-up. The manager enables the SYNC signal when its state table reaches `POWERED_SYNC_ON`.
 ```json
 # Status OFF: {"type":"SET","msg":18,"args":{"sts_period_ms":0}}
 
 # Debug Loop (5 second refresh)
 {"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.mv","ltc3901.pwr_en","adc.ltc3901_vcc.mv","pwm.me.freq_hz","adc.ltc3901_me.mv"]}}
 
-{"type":"SET","msg":124,"args":{"dbg_signals":{"ltc3901.pwr_en":true}}}{"type":"SET","msg":124,"args":{"dbg_signals":{"sync.enable":true}}}
+{"type":"SET","msg":124,"args":{"ltc3901_cmd":"RUN", "lt8316_cmd":"RUN"}}
 
 # Monitor LTC3901 Signals
 {"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.raw","adc.ltc3901_vcc.raw","adc.ltc3901_me.raw","adc.ltc3901_mf.raw","pwm.me.freq_hz","pwm.mf.freq_hz"]}}

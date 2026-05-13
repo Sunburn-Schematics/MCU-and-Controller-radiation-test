@@ -8,6 +8,8 @@
 
 #define ADC_SENSE_ADC_MAX_COUNT    (4095U)
 #define ADC_SENSE_VDDA_MV_NOMINAL  (3300U)
+#define ADC_SENSE_LTC3901_DIVIDER_HIGH_OHMS (100000L)
+#define ADC_SENSE_LTC3901_DIVIDER_LOW_OHMS  (37400L)
 
 typedef struct
 {
@@ -27,6 +29,22 @@ static bool adc_sense_drv_is_valid_channel(adc_sense_channel_t channel)
     return ((unsigned int)channel < (unsigned int)ADC_SENSE_CHANNEL_COUNT);
 }
 
+static int32_t adc_sense_drv_ltc3901_divider_slope_scaled(void)
+{
+    const int64_t divider_total_ohms =
+        (int64_t)ADC_SENSE_LTC3901_DIVIDER_HIGH_OHMS +
+        (int64_t)ADC_SENSE_LTC3901_DIVIDER_LOW_OHMS;
+    const int64_t divisor =
+        (int64_t)ADC_SENSE_ADC_MAX_COUNT *
+        (int64_t)ADC_SENSE_LTC3901_DIVIDER_LOW_OHMS;
+    const int64_t dividend =
+        (int64_t)ADC_SENSE_VDDA_MV_NOMINAL *
+        divider_total_ohms *
+        (int64_t)ADC_SENSE_CALIBRATION_SLOPE_SCALE;
+
+    return (int32_t)((dividend + (divisor / 2LL)) / divisor);
+}
+
 static int32_t adc_sense_drv_counts_to_millivolts(uint16_t counts)
 {
     uint32_t scaled_mv;
@@ -38,6 +56,7 @@ static int32_t adc_sense_drv_counts_to_millivolts(uint16_t counts)
 static void adc_sense_drv_load_default_calibration(void)
 {
     size_t i;
+    int32_t ltc3901_divider_slope_scaled;
 
     for (i = 0u; i < (size_t)ADC_SENSE_CHANNEL_COUNT; ++i)
     {
@@ -45,6 +64,18 @@ static void adc_sense_drv_load_default_calibration(void)
         s_adc_calibration[i].Offset = 0L;
         s_adc_calibration[i].Valid = false;
     }
+
+    ltc3901_divider_slope_scaled = adc_sense_drv_ltc3901_divider_slope_scaled();
+
+    s_adc_calibration[ADC_SENSE_CHANNEL_VUPSTREAM].SlopeScaled =
+        ltc3901_divider_slope_scaled;
+    s_adc_calibration[ADC_SENSE_CHANNEL_VUPSTREAM].Offset = 0L;
+    s_adc_calibration[ADC_SENSE_CHANNEL_VUPSTREAM].Valid = true;
+
+    s_adc_calibration[ADC_SENSE_CHANNEL_LTC3901_VCC].SlopeScaled =
+        ltc3901_divider_slope_scaled;
+    s_adc_calibration[ADC_SENSE_CHANNEL_LTC3901_VCC].Offset = 0L;
+    s_adc_calibration[ADC_SENSE_CHANNEL_LTC3901_VCC].Valid = true;
 }
 
 static bool adc_sense_drv_apply_calibration(uint16_t raw_counts,
@@ -163,6 +194,16 @@ void adc_sense_drv_clear_calibration(adc_sense_channel_t channel)
 {
     if (!adc_sense_drv_is_valid_channel(channel))
     {
+        return;
+    }
+
+    if ((channel == ADC_SENSE_CHANNEL_VUPSTREAM) ||
+        (channel == ADC_SENSE_CHANNEL_LTC3901_VCC))
+    {
+        s_adc_calibration[(unsigned int)channel].SlopeScaled =
+            adc_sense_drv_ltc3901_divider_slope_scaled();
+        s_adc_calibration[(unsigned int)channel].Offset = 0L;
+        s_adc_calibration[(unsigned int)channel].Valid = true;
         return;
     }
 

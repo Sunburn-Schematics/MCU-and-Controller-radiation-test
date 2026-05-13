@@ -84,7 +84,7 @@ This message shall:
 The periodic message should use the `STS` response category and be emitted as a single JSON object on each line.
 
 Recommended abstract form:
-- `{ "type": "STS", "state": "NORMAL", "tsb": <value>, "dut1": { ... }, "dut2": { ... }, "faults": { ... }, "warnings": { ... } }`
+- `{ "type": "STS", "state": "NORMAL", "tsb": <value>, "dut1": { ... }, "dut2": { ... }, "warnings": { ... } }`
 
 This JSONL `STS` message should be treated as the primary supervisory heartbeat from HC to TE.
 
@@ -144,6 +144,7 @@ The following command families are recommended for v1.
 ### Notes
 - `GET_CAPABILITIES` is useful because requirements and protocol may evolve over time
 - version reporting should support later compatibility management
+- in the current JSONL implementation, the firmware software version is queried with `GET args.sw_version:true` and returned as `args.sw_version`
 
 ## 7.2 Status and Telemetry Commands
 | Command | Purpose | Response |
@@ -191,6 +192,8 @@ The TE should rely primarily on the HC periodic once-per-second `STS` message du
 |---|---|---|
 | `SET_DUT1_POWER ON|OFF` | control DUT1 power path | `OK` or `ERR` |
 | `SET_DUT2_POWER ON|OFF` | control DUT2 HV path | `OK` or `ERR` |
+| `SET_LTC3901_CMD RUN|HALT|RESET` | request LTC3901 manager command | `RSP` |
+| `SET_LT8316_CMD RUN|RESET` | request LT8316 manager command | `RSP` |
 | `GET_DUT1_POWER` | return commanded DUT1 power state | `RSP` |
 | `GET_DUT2_POWER` | return commanded DUT2 power state | `RSP` |
 | `SET_SYNC_ENABLE ON|OFF` | enable/disable DUT1 sync generation if exposed as a separate control | `OK` or `ERR` |
@@ -198,6 +201,9 @@ The TE should rely primarily on the HC periodic once-per-second `STS` message du
 
 ### Control Policy Notes
 - acceptance of power or sync commands depends on current HC state and safety policy
+- in the current JSONL implementation, LTC3901 manager commands are carried as `SET args.ltc3901_cmd` with values `RUN`, `HALT`, and `RESET`
+- in the current JSONL implementation, LT8316 manager commands are carried as `SET args.lt8316_cmd` with values `RUN` and `RESET`
+- `HALT` disables LTC3901 power/sync outputs without clearing LTC3901 manager fault counters; `RESET` disables outputs and clears the manager fault counters
 - affected-DUT-only isolation policy means unrelated DUT controls should remain available unless a broader system rule blocks them
 
 ## 7.6 Diagnostics and Event Commands
@@ -227,10 +233,9 @@ A `GET_STATUS` response and periodic `STS` report should include at minimum:
 - DUT2 commanded power state
 - DUT1 summary measurements
 - DUT2 summary measurements
-- active HLF summary
-- active LLF summary if representable
-- active warnings summary
 - TSB
+
+Fault details are reported through asynchronous `EVT` messages and fault-specific query responses rather than the periodic `STS` payload.
 
 ### 8.3 Recommended Once-Per-Second `STS` Message in `NORMAL`
 When the HC is in `NORMAL`, it should send a summary `STS` message to the TE at a nominal 1 Hz rate on a best-effort basis.
@@ -283,7 +288,6 @@ The `duts.LTC3901` object shall include:
 - `mf_freq`
 - `mf_ratio`
 - `mf_anlg`
-- `faults`
 
 #### 8.3.4 Required `LT8316` Object Keys
 The `duts.LT8316` object shall include:
@@ -292,27 +296,13 @@ The `duts.LT8316` object shall include:
 - `gate_freq`
 - `gate_anlg`
 - `vout`
-- `faults`
 
-#### 8.3.5 Required DUT-Local `faults` Object Shape
-For v1, each DUT-local `faults` object shall use this shape:
-- `count`
-- `summary`
-- `ids`
-
-Where:
-- `count` is the number of active faults currently associated with that DUT
-- `summary` is a short human-readable roll-up string such as `NONE`, `OVERCURRENT`, or `MULTIPLE`
-- `ids` is an array of active fault IDs for that DUT, which may be empty
-
-An empty-fault case should therefore appear as:
-- `{ "count": 0, "summary": "NONE", "ids": [] }`
-
-#### 8.3.6 Recommended Value Conventions
+#### 8.3.5 Recommended Value Conventions
 For v1, the following conventions are recommended:
 - `type` uses a stable string enum, with `STS` required for this record type
 - top-level `state` uses one of: `BOOT`, `FAULT`, `NORMAL`, `SLAVE`
-- `duts.<name>.state` uses one of: `NORMAL`, `RECOVERED`, `ISOLATED`, `FAULT`
+- `duts.LTC3901.state` uses the LTC3901 manager state-table names: `RESET`, `HALT`, `POWER_UP`, `POWER_FAULT`, `POWERED`, `POWERED_SYNC_ON`, `POWERED_SYNC_OFF`, or `POWERED_SYNC_FAULT`
+- `duts.LT8316.state` uses the LT8316 manager state-table names: `RESET`, `FAULT`, or `POWERED`
 - `beam_on` uses a JSON boolean
 - `hc_id` uses a JSON integer representing the HC hardware ID
 - `ts` uses the HC RTC-backed timestamp string format `YYYYMMDD HH:MM:SS`
@@ -323,12 +313,11 @@ For v1, the following conventions are recommended:
 - populated fields ending in `_ratio` use percent over the range `0` to `100`
 - fields ending in `_anlg` use millivolts (`mV`)
 - `vout` uses millivolts (`mV`)
-- `faults.count` uses a JSON integer
-- `faults.summary` uses one of: `NONE`, `SINGLE`, `MULTIPLE`
-- `faults.ids` uses a JSON array of strings
-#### 8.3.7 Frequency and Analog Capture / Scaling Rules
+#### 8.3.6 Frequency and Analog Capture / Scaling Rules
 For v1, frequency and analog measurement fields reported in `STS` should follow these general rules:
 - reported values shall be scaled into engineering units before transmission in `STS`; raw ADC counts, timer counts, or other unscaled internal values should not be used in the periodic `STS` payload
+- `vsupply` and `vshunt` should represent the circuit sense-point voltage rather than only the MCU ADC pin voltage
+- the default `vsupply` and `vshunt` scaling assumes 100 k / 37.4 k input dividers unless overridden by calibration
 - fields ending in `_freq` should represent the measured signal frequency in hertz after applying the relevant timer/counter scaling and any required averaging or qualification logic
 - fields ending in `_anlg` should represent the measured analog signal level in millivolts after applying the relevant ADC scaling, reference conversion, divider or gain correction, and any required averaging or qualification logic
 - populated fields ending in `_ratio` should represent a derived duty, activity, or proportion metric scaled to the range `0` to `100`
@@ -339,7 +328,7 @@ For v1, frequency and analog measurement fields reported in `STS` should follow 
 For v1, the intended field-specific interpretation is:
 - `me_freq`, `mf_freq`, and `gate_freq`: frequency-like measurements reported in `Hz`
 - `me_anlg`, `mf_anlg`, `gate_anlg`, `vsupply`, `vshunt`, and `vout`: analog-derived measurements reported in `mV`
-- `isupply`: derived LTC3901 supply current reported in `mA` as `(vsupply - vshunt) * 0.367`
+- `isupply`: derived LTC3901 supply current reported in `mA` as `(vsupply - vshunt) / 10 ohms`
 - `me_ratio`: derived LTC3901 ME duty ratio reported over the range `0` to `100`
 - `mf_ratio`: derived LTC3901 MF duty ratio reported over the range `0` to `100`
 
@@ -348,35 +337,34 @@ Applicable scaling and qualification variables may include, for example:
 - timer or counter scaling variables for frequency conversion
 - moving-average, debounce, persistence, or qualification variables for publication stability
 
-#### 8.3.8 DUT-Local `state` Meanings
-For v1, DUT-local `state` values in `duts.<name>.state` should be interpreted as follows:
-- `NORMAL`: the DUT is not isolated, no DUT-local fault is active, and the HC considers the DUT to be operating within expected conditions based on the available summary measurements and fault logic.
-- `FAULT`: one or more DUT-local faults have been detected for the DUT and the HC is attempting to restart the device.
-- `RECOVERED`: after restarting the device due to a `FAULT`, the device appears to be operating within `NORMAL` parameters again.
-- `ISOLATED`: recovery failed and the DUT has been switched off or otherwise isolated so as not to damage other circuits or corrupt test results.
+#### 8.3.7 DUT-Local `state` Meanings
+For v1, DUT-local `state` values in `duts.<name>.state` are the active DUT manager states.
 
-#### 8.3.8 DUT-Local `state` Transition Rules
-For v1, DUT-local state transitions should follow these rules:
-- `NORMAL` to `FAULT`: enter when one or more DUT-local faults are detected for that DUT and the HC begins a recovery restart attempt.
-- `FAULT` to `RECOVERED`: enter after the HC restart attempt completes and the DUT appears to be operating within `NORMAL` parameters again, with no currently active DUT-local fault.
-- `FAULT` to `ISOLATED`: enter when the HC determines that recovery has failed and switches off or otherwise isolates the DUT to protect hardware integrity or test validity.
-- `RECOVERED` to `NORMAL`: enter after the DUT continues operating within `NORMAL` parameters for the required observation or qualification interval, if such an interval is implemented.
-- `RECOVERED` to `FAULT`: enter if one or more DUT-local faults are detected again during or after the post-restart recovery period and the HC begins another recovery restart attempt.
-- `NORMAL` to `ISOLATED`: allowed when the HC intentionally isolates the DUT by command or protective action without first attempting recovery through the `FAULT` state.
-- `ISOLATED` to `NORMAL`: allowed only after the DUT is intentionally re-enabled and the HC determines that the DUT is again operating within `NORMAL` parameters.
-- `ISOLATED` to `FAULT`: allowed if re-enable or restart is attempted from the isolated condition and a DUT-local fault is immediately detected during the restart attempt.
+LTC3901 states:
+- `RESET`: LTC3901 power and sync outputs are disabled and fault counters are cleared.
+- `HALT`: LTC3901 power and sync outputs are disabled and fault counters are preserved.
+- `POWER_UP`: LTC3901 power is enabled while voltage/current startup checks are being qualified.
+- `POWER_FAULT`: LTC3901 power is disabled after a power/startup fault.
+- `POWERED`: LTC3901 power is enabled and sync is not yet enabled.
+- `POWERED_SYNC_ON`: LTC3901 power and SDRA/SDRB sync outputs are enabled.
+- `POWERED_SYNC_OFF`: LTC3901 power is enabled and sync outputs are disabled during the off portion of the sync cycle.
+- `POWERED_SYNC_FAULT`: LTC3901 power is enabled, sync outputs are disabled, and the manager is handling a sync activity fault.
 
-#### 8.3.9 DUT Recovery / Restart Policy
-For v1, DUT-local recovery and restart behavior should follow these rules:
-- When a DUT-local fault drives a DUT into `FAULT`, the HC should begin a DUT-local recovery attempt for the affected DUT only.
-- Recovery attempt count, restart timing, and qualification timing shall be controlled by named variables rather than fixed numeric values in this specification, for example `VAR_HC_DUT_RESTART_MAX_ATTEMPTS`, `VAR_HC_DUT_RESTART_DELAY_MS`, and `VAR_HC_DUT_RECOVERY_QUALIFY_TIME_MS`.
-- If restart succeeds and the DUT appears to operate within `NORMAL` parameters with no active DUT-local fault, the DUT-local state shall transition to `RECOVERED`.
-- If the DUT remains faulted, immediately re-faults, or exceeds the permitted number of recovery attempts, the HC shall transition that DUT to `ISOLATED`.
-- Transition from `RECOVERED` to `NORMAL` shall occur only after the DUT satisfies the required post-restart observation or qualification interval, if implemented.
-- Recovery actions shall not, by default, interrupt the unaffected DUT.
-- Re-enable or retry from `ISOLATED` shall occur only by explicit supervisory action or other policy defined elsewhere in the HC specification.
+LT8316 states:
+- `RESET`: LT8316 HV power is disabled and fault counters are cleared.
+- `FAULT`: LT8316 HV power is disabled after a gate/startup fault.
+- `POWERED`: LT8316 HV power is enabled.
 
-#### 8.3.10 DUT Restart Qualification Criteria
+#### 8.3.8 DUT Recovery / Restart Policy
+For v1, DUT-local recovery and restart behavior is owned by each DUT manager:
+- LTC3901 power/startup failures transition to `POWER_FAULT`, disable LTC3901 power and sync outputs, increment the LTC3901 power fault count, and retry by entering `POWER_UP` while the retry count remains below the configured maximum.
+- LTC3901 sync activity failures transition to `POWERED_SYNC_FAULT`, keep LTC3901 power enabled, disable sync outputs, increment the sync fault count, and retry sync by entering `POWERED_SYNC_ON` after the configured sync fault delay.
+- LT8316 gate/startup failures transition to `FAULT`, disable LT8316 HV power, increment the LT8316 fault count, and retry by entering `POWERED` while the retry count remains below the configured maximum.
+- `RESET` commands return the affected manager to `RESET` and clear that manager's fault counters.
+- LTC3901 `HALT` returns the LTC3901 manager to `HALT` without clearing its fault counters.
+- Recovery actions apply to the affected DUT manager only unless a broader policy is added later.
+
+#### 8.3.9 DUT Restart Qualification Criteria
 For v1, a DUT restart attempt should be considered successful only when all applicable qualification conditions are satisfied for that DUT:
 - no DUT-local fault remains active for that DUT
 - the DUT is not isolated
@@ -399,27 +387,27 @@ Qualification timing and acceptance thresholds shall be controlled by named vari
 - `VAR_HC_DUT2_GATE_FREQ_MIN_HZ`
 - `VAR_HC_DUT2_GATE_FREQ_MAX_HZ`
 
-If all applicable qualification conditions are satisfied after restart, the DUT-local `state` shall transition from `FAULT` to `RECOVERED`. If qualification fails, renewed DUT-local fault detection occurs, or the qualification interval cannot be completed successfully, the DUT shall remain in `FAULT` or transition to `ISOLATED` according to the DUT recovery / restart policy.
+If the applicable qualification conditions are satisfied after restart, the DUT manager transitions to its normal powered state sequence: LTC3901 proceeds from `POWER_UP` to `POWERED` and then through the sync states, while LT8316 remains in `POWERED`. If qualification fails, the manager remains in or returns to its fault handling state according to the DUT recovery / restart policy.
 
-#### 8.3.11 DUT Restart Action Sequence
+#### 8.3.10 DUT Restart Action Sequence
 For v1, when the HC performs a DUT-local restart attempt, the action sequence should follow this order:
-- detect one or more DUT-local faults and set the DUT-local `state` to `FAULT`
+- detect one or more DUT-local faults and enter the relevant manager fault state
 - record or update DUT fault status and any related evidence required for reporting
 - de-assert the affected DUT power-enable or other DUT-local enable path as required for safe restart
 - wait the required restart delay interval controlled by `VAR_HC_DUT_RESTART_DELAY_MS`
 - re-assert the affected DUT power-enable or other DUT-local enable path
 - allow the DUT to reinitialize for any required startup or settle interval defined by the applicable HC variables and DUT-specific logic
 - observe DUT-local telemetry and fault logic during the qualification interval
-- if qualification succeeds, transition the DUT-local `state` to `RECOVERED`
-- if qualification fails, either begin another permitted restart attempt or transition the DUT-local `state` to `ISOLATED` according to `VAR_HC_DUT_RESTART_MAX_ATTEMPTS` and the DUT recovery policy
+- if qualification succeeds, transition through the applicable manager powered state sequence
+- if qualification fails, either begin another permitted restart attempt or remain in the applicable manager fault state after retry attempts are exhausted
 
 The HC should apply this restart sequence to the affected DUT only, unless another HC policy explicitly requires broader action.
 
-Immediate event emission is not required for DUT-local fault, restart, recovery, or isolation transitions. For v1, periodic `STS` reporting at the nominal 1 Hz rate is sufficient for TE visibility of these state changes.
+Manager events may emit asynchronous `EVT` records for significant DUT-local transitions. Periodic `STS` reporting carries the current manager state for ongoing visibility.
 
-#### 8.3.12 Canonical Example `STS` JSONL Object
+#### 8.3.11 Canonical Example `STS` JSONL Object
 Example single emitted JSONL line:
-- `{ "type": "STS", "hc_id": 63, "ts": "20260501 10:30:00", "state": "NORMAL", "beam_on": true, "duts": { "LTC3901": { "state": "NORMAL", "pwr_en": true, "sync": true, "vsupply": 12345, "vshunt": 12345, "isupply": 12345, "me_freq": 12345, "me_ratio": 50, "me_anlg": 12345, "mf_freq": 12345, "mf_ratio": 50, "mf_anlg": 12345, "faults": { "count": 0, "summary": "NONE", "ids": [] } }, "LT8316": { "state": "NORMAL", "pwr_en": true, "gate_freq": 12345, "gate_anlg": 12345, "vout": 12345, "faults": { "count": 1, "summary": "SINGLE", "ids": ["HLF-010"] } } } }`
+- `{ "type": "STS", "hc_id": 63, "ts": "20260501 10:30:00", "state": "NORMAL", "beam_on": true, "duts": { "LTC3901": { "state": "POWERED_SYNC_ON", "pwr_en": true, "sync": true, "vsupply": 12345, "vshunt": 12345, "isupply": 12345, "me_freq": 12345, "me_ratio": 50, "me_anlg": 12345, "mf_freq": 12345, "mf_ratio": 50, "mf_anlg": 12345 }, "LT8316": { "state": "POWERED", "pwr_en": true, "gate_freq": 12345, "gate_anlg": 12345, "vout": 12345 } } }`
 
 Field ordering should be kept stable in firmware where practical, even though JSON object ordering is not semantically significant.
 
@@ -451,7 +439,6 @@ Periodic reports should include:
 - Beam On status
 - DUT1 status summary
 - DUT2 status summary
-- active fault/warning summary
 - TE link status
 - TSB
 
@@ -463,6 +450,19 @@ In addition to periodic reports, the HC should be capable of issuing event-style
 - warning asserted
 - warning cleared
 - TE link became active/inactive
+
+The current JSONL implementation uses asynchronous `EVT` records for DUT manager events. `EVT` records are HC-originated and are not responses to a TE request, so they do not include a request `msg` field.
+
+The current first-slice `EVT` shape is:
+
+- `{ "type": "EVT", "hc": 1, "ts": "20260501 10:30:00", "args": { "msg": "LTC3901: Entering POWER_UP" } }`
+
+The current payload is intentionally limited to `args.msg`, with manager-generated messages prefixed by the related device name. Future revisions may add structured event identifiers, scopes, severity, or fault references without changing the top-level `type` / `hc` / `ts` / `args` pattern.
+
+For manager-generated events, the current `args.msg` text starts with the related device name. Fault events include the measured value and comparison value where available. Retry events include retry count and maximum retry count, for example:
+
+- `{ "type": "EVT", "hc": 1, "ts": "20260501 10:30:00", "args": { "msg": "LTC3901: Isupply Current too high: measured 123 mA >= limit 100 mA" } }`
+- `{ "type": "EVT", "hc": 1, "ts": "20260501 10:30:00", "args": { "msg": "LTC3901: Retrying 1/3 Power Up" } }`
 
 ## 10. Error Handling Model
 ### 10.1 Error Categories

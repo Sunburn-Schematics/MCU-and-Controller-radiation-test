@@ -65,6 +65,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/fw_app.c
     App/hc_debug_telemetry.c
     App/hc_app_status.c
+    App/ltc3901_manager.c
+    App/lt8316_manager.c
     Bsp/bsp_board.c
 #    Drivers_Local/sync_drv.c
 #    Drivers_Local/usb_vcp_drv.c

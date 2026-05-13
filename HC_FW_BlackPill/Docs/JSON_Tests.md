@@ -7,15 +7,17 @@ This document provides simple test vectors for the current first-slice HC comman
 Current implemented scope:
 - command processor frames one complete top-level JSON object from the USB byte stream
 - `CommandHandler` supports `SET` and `GET`
-- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
+- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, `args.adc_cal`, `args.ltc3901_cmd`, and `args.lt8316_cmd`
 - `SET` also supports `args.dbg_signals` as an object for setting digital signal values (power enables and LEDs)
-- `GET` currently supports `args.date_time`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
+- a `SET` request may include multiple supported fields; all valid fields are applied and the response contains one combined `args` object
+- `GET` currently supports `args.date_time`, `args.sw_version`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
 - timestamps use seconds-only format: `YYYYMMDD HH:MM:SS`
 - current temporary HC identifier in responses is `1`
 - periodic `STS` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
 - `args.sts_period_ms = 0` disables periodic `STS` transmission
 - periodic `DBG` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
 - `args.dbg_period_ms = 0` disables periodic `DBG` transmission
+- asynchronous `EVT` messages are emitted when application managers report notable state-machine events
 
 ---
 
@@ -72,6 +74,24 @@ Notes:
 - this is the primary `GET` happy-path example
 - `args.date_time` is currently a boolean selector for `GET`
 - returned `args.date_time` should match the current HC RTC-backed time
+
+---
+
+### 3a. Valid `GET sw_version`
+
+Request:
+```json
+{"type":"GET","msg":2,"args":{"sw_version":true}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":2,"ts":"20260501 10:30:00","args":{"sw_version":"0.1.0"}}
+```
+
+Notes:
+- `args.sw_version` is currently a boolean selector for `GET`
+- returned `args.sw_version` is compiled into the firmware using `SW_VERSION_STRING`
 
 ---
 
@@ -204,22 +224,100 @@ Notes:
 
 Request:
 ```json
-{"type":"SET","msg":24,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true,"sync.enable":true}}}
+{"type":"SET","msg":24,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true,"sync.enable":true}}}
+{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}}
 ```
 
 Notes:
-- this sets the LTC3901 power enable to ON, LT8316 power enable to OFF, controls the LED states, and enables SYNC output
-- settable digital signals include `ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`, and `sync.enable`
+- this requests LTC3901 manager power-up, requests LT8316 manager reset, and controls the LED states
+- settable digital signals include `ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, and `led.green`
+- `sync.enable` is read-only because the LTC3901 manager owns the SYNC output state
 - attempting to set other signals will result in an error
 
 ---
 
-### 11. Valid `GET adc_cal`
+### 12. Valid `SET LTC3901 command`
+
+Request:
+```json
+{"type":"SET","msg":27,"args":{"ltc3901_cmd":"RUN"}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":27,"ts":"20260501 10:30:00","args":{"ltc3901_cmd":"RUN"}}
+```
+
+Notes:
+- valid command values are `RUN`, `HALT`, and `RESET`
+- `RUN` requests transition to `POWER_UP` and normal manager flow
+- `HALT` requests transition to `HALT`, which disables LTC3901 power and sync without clearing manager fault counters
+- `RESET` requests transition to `RESET`, which disables LTC3901 power and sync and clears manager fault counters
+
+---
+
+### 13. Valid `SET LT8316 command`
+
+Request:
+```json
+{"type":"SET","msg":28,"args":{"lt8316_cmd":"RUN"}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":28,"ts":"20260501 10:30:00","args":{"lt8316_cmd":"RUN"}}
+```
+
+Notes:
+- valid command values are `RUN` and `RESET`
+- `RUN` requests transition to `POWERED`
+- `RESET` requests transition to `RESET`, which disables LT8316 HV power and clears manager fault counters
+
+---
+
+### 14. Valid combined manager command
+
+Request:
+```json
+{"type":"SET","msg":124,"args":{"ltc3901_cmd":"RUN","lt8316_cmd":"RUN"}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":124,"ts":"20260501 10:30:00","args":{"ltc3901_cmd":"RUN","lt8316_cmd":"RUN"}}
+```
+
+Notes:
+- both manager commands are applied from the same SET request
+- the command receives one combined `RSP`, not two separate `RSP` records
+- asynchronous `EVT` records may also be emitted later as each manager advances its state machine
+
+---
+
+### 15. Valid combined `SET` command
+
+Request:
+```json
+{"type":"SET","msg":125,"args":{"sts_period_ms":0,"dbg_period_ms":1000,"ltc3901_cmd":"RUN","lt8316_cmd":"RUN"}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":125,"ts":"20260501 10:30:00","args":{"sts_period_ms":0,"dbg_period_ms":1000,"ltc3901_cmd":"RUN","lt8316_cmd":"RUN"}}
+```
+
+Notes:
+- all supplied SET fields are applied from the same request
+- the command receives one combined `RSP`, not one `RSP` per field
+- if any supplied field is invalid, the command returns an error instead of silently skipping that field
+
+---
+
+### 16. Valid `GET adc_cal`
 
 Request:
 ```json
@@ -233,7 +331,7 @@ Expected response:
 
 ---
 
-### 12. Valid `SET adc_cal` with channel name
+### 17. Valid `SET adc_cal` with channel name
 
 Request:
 ```json
@@ -251,7 +349,7 @@ Notes:
 
 ---
 
-### 13. Valid `GET adc_cal` with channel name
+### 18. Valid `GET adc_cal` with channel name
 
 Request:
 ```json
@@ -265,7 +363,7 @@ Expected response:
 
 ---
 
-### 14. Valid JSON preceded or followed by non-JSON noise bytes
+### 19. Valid JSON preceded or followed by non-JSON noise bytes
 
 Example input stream:
 ```text
@@ -291,14 +389,54 @@ Notes:
 
 Example emitted line:
 ```json
-{"type":"STS","hc_id":1,"ts":"20260501 10:30:00","state":"NORMAL","beam_on":false,"duts":{"LTC3901":{"state":"NORMAL","pwr_en":false,"sync":true,"vsupply":null,"vshunt":null,"isupply":null,"me_freq":null,"me_ratio":null,"me_anlg":null,"mf_freq":null,"mf_ratio":null,"mf_anlg":null,"faults":{"count":0,"summary":"NONE","ids":[]}},"LT8316":{"state":"NORMAL","pwr_en":false,"gate_freq":null,"gate_anlg":null,"vout":null,"faults":{"count":0,"summary":"NONE","ids":[]}}}}
+{"type":"STS","hc_id":1,"ts":"20260501 10:30:00","state":"NORMAL","beam_on":false,"duts":{"LTC3901":{"state":"RESET","pwr_en":false,"sync":false,"vsupply":null,"vshunt":null,"isupply":null,"me_freq":null,"me_ratio":null,"me_anlg":null,"mf_freq":null,"mf_ratio":null,"mf_anlg":null},"LT8316":{"state":"RESET","pwr_en":false,"gate_freq":null,"gate_anlg":null,"vout":null}}}
 ```
 
 Notes:
 - `STS` is HC-originated and is not a TE request/response transaction
 - `ts` uses the HC RTC-backed timestamp format `YYYYMMDD HH:MM:SS`
-- current first-slice implementation uses application-layer placeholder values for DUT telemetry fields that are not yet wired to live measurements
+- DUT `state` values use the active DUT manager state names.
+- fault details are emitted through asynchronous `EVT` messages rather than the periodic `STS` payload.
 - unavailable measurements use `null`
+
+---
+
+## Valid HC asynchronous `EVT` example
+
+Example emitted line:
+```json
+{"type":"EVT","hc":1,"ts":"20260501 10:30:00","args":{"msg":"LTC3901: Entering POWER_UP"}}
+```
+
+Notes:
+- `EVT` is HC-originated and is not a TE request/response transaction.
+- `EVT` does not include a request `msg` field because it is asynchronous.
+- The current first-slice event payload is `args.msg`, and manager-generated messages start with the related device name.
+- Manager state transitions may emit EVT messages such as `LTC3901: Entering POWER_UP`, `LTC3901: Powered`, or `LTC3901: Cycle Sync ON`.
+- Fault EVT messages include the measured value and the comparison value where available.
+- Retry EVT messages include retry count and maximum retry count.
+
+Fault/retry examples:
+
+```json
+{"type":"EVT","hc":1,"ts":"20260501 10:30:00","args":{"msg":"LTC3901: Isupply Current too high: measured 123 mA >= limit 100 mA"}}
+```
+
+```json
+{"type":"EVT","hc":1,"ts":"20260501 10:30:00","args":{"msg":"LTC3901: VUpstream Too Low: measured 2750 mV < minimum 3000 mV"}}
+```
+
+```json
+{"type":"EVT","hc":1,"ts":"20260501 10:30:00","args":{"msg":"LTC3901: Power Up Timeout (2000ms): VUpstream (mV) 11116 < 12000; VCC (mV) 11045 < 12000"}}
+```
+
+```json
+{"type":"EVT","hc":1,"ts":"20260501 10:30:00","args":{"msg":"LT8316: GATE Stopped: measured null Hz, required valid frequency after 1000 ms; elapsed 1010 ms"}}
+```
+
+```json
+{"type":"EVT","hc":1,"ts":"20260501 10:30:00","args":{"msg":"LTC3901: Retrying 1/3 Power Up"}}
+```
 
 ---
 
@@ -306,7 +444,7 @@ Notes:
 
 These are valid JSON syntactically, but should produce an error response because they are unsupported or invalid for the current implementation.
 
-### 15. Unsupported packet type `EXC`
+### 20. Unsupported packet type `EXC`
 
 Request:
 ```json
@@ -324,7 +462,7 @@ Notes:
 
 ---
 
-### 16. Missing supported field in `SET`
+### 21. Missing supported field in `SET`
 
 Request:
 ```json
@@ -333,12 +471,12 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, or adc_cal"}}
+{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cmd, or lt8316_cmd"}}
 ```
 
 ---
 
-### 17. `args.date_time` wrong format in `SET`
+### 22. `args.date_time` wrong format in `SET`
 
 Request:
 ```json
@@ -356,7 +494,7 @@ Notes:
 
 ---
 
-### 18. Invalid calendar/time value in `SET`
+### 23. Invalid calendar/time value in `SET`
 
 Request:
 ```json
@@ -370,7 +508,7 @@ Expected response could / should be:
 
 ---
 
-### 19. Invalid `args.sts_period_ms` type in `SET`
+### 24. Invalid `args.sts_period_ms` type in `SET`
 
 Request:
 ```json
@@ -384,7 +522,7 @@ Expected response could / should be:
 
 ---
 
-### 20. `GET` missing `args`
+### 25. `GET` missing `args`
 
 Request:
 ```json
@@ -398,7 +536,7 @@ Expected response could / should be:
 
 ---
 
-### 21. `GET` missing supported field
+### 26. `GET` missing supported field
 
 Request:
 ```json
@@ -407,12 +545,12 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports args.date_time, args.raw_adc, dbg_period_ms, dbg_signals, or adc_cal"}}
+{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports args.date_time, args.sw_version, args.raw_adc, dbg_period_ms, dbg_signals, or adc_cal"}}
 ```
 
 ---
 
-### 22. Invalid `SET dbg_period_ms`
+### 27. Invalid `SET dbg_period_ms`
 
 Request:
 ```json
@@ -426,7 +564,7 @@ Expected response could / should be:
 
 ---
 
-### 23. Invalid `SET dbg_signals`
+### 28. Invalid `SET dbg_signals`
 
 Request:
 ```json
@@ -440,7 +578,7 @@ Expected response could / should be:
 
 ---
 
-### 24. Invalid `SET adc_cal`
+### 29. Invalid `SET adc_cal`
 
 Request:
 ```json
@@ -454,7 +592,7 @@ Expected response could / should be:
 
 ---
 
-### 25. Invalid `GET dbg_signals`
+### 30. Invalid `GET dbg_signals`
 
 Request:
 ```json
@@ -468,7 +606,7 @@ Expected response could / should be:
 
 ---
 
-### 26. `GET args.date_time` not `true`
+### 31. `GET args.date_time` not `true`
 
 Request:
 ```json
@@ -482,7 +620,7 @@ Expected response could / should be:
 
 ---
 
-### 27. Non-numeric `msg`
+### 32. Non-numeric `msg`
 
 Request:
 ```json
@@ -503,7 +641,7 @@ Notes:
 
 These inputs should be used to validate JSON framing, malformed-object handling, and parser robustness.
 
-### 28. Missing closing brace
+### 33. Missing closing brace
 
 Request:
 ```json
@@ -519,7 +657,7 @@ Notes:
 
 ---
 
-### 29. Extra closing brace
+### 34. Extra closing brace
 
 Request:
 ```json
@@ -537,7 +675,7 @@ Expected first response:
 
 ---
 
-### 30. Unquoted key
+### 35. Unquoted key
 
 Request:
 ```json
@@ -551,7 +689,7 @@ Expected response could / should be:
 
 ---
 
-### 31. Unterminated string
+### 36. Unterminated string
 
 Request:
 ```json
@@ -567,7 +705,7 @@ Notes:
 
 ---
 
-### 32. Top-level array instead of object
+### 37. Top-level array instead of object
 
 Request:
 ```json
@@ -589,7 +727,7 @@ Notes:
 
 ---
 
-### 33. Oversized JSON object
+### 38. Oversized JSON object
 
 Request:
 ```json
@@ -608,7 +746,7 @@ Notes:
 
 ## Back-to-back object examples
 
-### 34. Two valid objects in one input stream
+### 39. Two valid objects in one input stream
 
 Input stream:
 ```text

@@ -631,6 +631,111 @@ hc_cmd_status_t hc_jsonl_parse_set_adc_calibration(const char *line,
     return hc_jsonl_parse_bool_primitive(line, &tokens[valid_index], &adc_cal_request_out->Valid);
 }
 
+hc_cmd_status_t hc_jsonl_parse_set_ltc3901_cmd(const char *line,
+                                               const jsmntok_t *tokens,
+                                               const hc_cmd_request_t *request,
+                                               hc_jsonl_set_ltc3901_cmd_request_t *cmd_request_out)
+{
+    int args_index;
+    int cmd_index;
+    size_t value_len;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL) || (cmd_request_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    memset(cmd_request_out, 0, sizeof(*cmd_request_out));
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    cmd_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "ltc3901_cmd");
+    if (cmd_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (!hc_jsonl_token_is_string(&tokens[cmd_index]))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    value_len = (size_t)(tokens[cmd_index].end - tokens[cmd_index].start);
+    if ((value_len == 0U) || (value_len >= sizeof(cmd_request_out->Command)))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    memcpy(cmd_request_out->Command, &line[tokens[cmd_index].start], value_len);
+    cmd_request_out->Command[value_len] = '\0';
+
+    if ((strcmp(cmd_request_out->Command, "RUN") != 0) &&
+        (strcmp(cmd_request_out->Command, "HALT") != 0) &&
+        (strcmp(cmd_request_out->Command, "RESET") != 0))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    return HC_CMD_OK;
+}
+
+hc_cmd_status_t hc_jsonl_parse_set_lt8316_cmd(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request,
+                                              hc_jsonl_set_lt8316_cmd_request_t *cmd_request_out)
+{
+    int args_index;
+    int cmd_index;
+    size_t value_len;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL) || (cmd_request_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    memset(cmd_request_out, 0, sizeof(*cmd_request_out));
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    cmd_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "lt8316_cmd");
+    if (cmd_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (!hc_jsonl_token_is_string(&tokens[cmd_index]))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    value_len = (size_t)(tokens[cmd_index].end - tokens[cmd_index].start);
+    if ((value_len == 0U) || (value_len >= sizeof(cmd_request_out->Command)))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    memcpy(cmd_request_out->Command, &line[tokens[cmd_index].start], value_len);
+    cmd_request_out->Command[value_len] = '\0';
+
+    if ((strcmp(cmd_request_out->Command, "RUN") != 0) &&
+        (strcmp(cmd_request_out->Command, "RESET") != 0))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    return HC_CMD_OK;
+}
+
 hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
                                              const jsmntok_t *tokens,
                                              const hc_cmd_request_t *request)
@@ -662,6 +767,44 @@ hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
     }
 
     if (!hc_jsonl_token_equals(line, &tokens[date_time_index], "true"))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    return HC_CMD_OK;
+}
+
+hc_cmd_status_t hc_jsonl_parse_get_sw_version(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request)
+{
+    int args_index;
+    int sw_version_index;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    sw_version_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "sw_version");
+    if (sw_version_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (!hc_jsonl_token_is_primitive(&tokens[sw_version_index]))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    if (!hc_jsonl_token_equals(line, &tokens[sw_version_index], "true"))
     {
         return HC_CMD_ERR_BAD_VALUE;
     }
