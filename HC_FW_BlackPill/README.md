@@ -1,6 +1,6 @@
 # HC_FW_BlackPill
 
-STM32F401 firmware project targeting a Black Pill development board.
+STM32F411 firmware project targeting a Black Pill development board.
 
 This project is structured for clean inclusion in the repository:
 
@@ -48,6 +48,21 @@ This keeps the generated superloop minimal and makes future migration to schedul
 ## Build notes
 
 The project uses the STM32CubeMX CMake export plus user source registration in the top-level `CMakeLists.txt`.
+
+Manual builds should use VS Code CMake Tools with the `Debug` or `Release` preset from `CMakePresets.json`.
+
+Automation should mirror the manual CMake Tools workflow rather than call compiler commands directly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools/build.ps1 -Preset Debug -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools/build.ps1 -Preset Debug
+```
+
+The wrapper discovers the installed STM32 VS Code extension paths, prepends the same `cube-cmake` and STM32 binary paths used by the STM32 VS Code extensions, and operates on the CMake-generated Ninja graph under `build/<preset>/`.
+
+The default backend is `-Backend Commands`. It asks Ninja for the generated command list with `ninja -t commands <target>`, then executes those generated compile and link commands one at a time with per-command timeouts and captured logs. This keeps automation synchronized with the manual CMake Tools build graph while avoiding the observed Ninja scheduler hang in this environment.
+
+Use `-Backend Ninja` or `-Backend CubeCMake` only when comparing behavior against the normal manual build layers.
 
 ## Repository inclusion notes
 

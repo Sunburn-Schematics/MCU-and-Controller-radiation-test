@@ -42,21 +42,39 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
-# Auto-discover local service sources
-file(GLOB DRIVERS_LOCAL_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/Drivers_Local/*.c"
+# Source files are listed explicitly instead of using file(GLOB ... CONFIGURE_DEPENDS).
+# Keep these lists in sync when adding, removing, or renaming project-owned source
+# files; this avoids CMake/Ninja VerifyGlobs regeneration hangs in this workspace.
+set(DRIVERS_LOCAL_SOURCES
+    Drivers_Local/adc_sense_drv.c
+    Drivers_Local/pwm_capture_drv.c
+    Drivers_Local/reset_reason_drv.c
+    Drivers_Local/rtc_drv.c
+    Drivers_Local/sync_drv.c
+    Drivers_Local/usb_vcp_drv.c
 )
 
-file(GLOB COMMAND_HANDLER_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/Services/CommandHandler/*.c"
+set(COMMAND_HANDLER_SOURCES
+    Services/CommandHandler/command_processor.c
+    Services/CommandHandler/hc_cmd_types.c
+    Services/CommandHandler/hc_comms_tx.c
+    Services/CommandHandler/hc_datetime.c
+    Services/CommandHandler/hc_jsonl_cmd.c
+    Services/CommandHandler/hc_jsonl_dispatch.c
+    Services/CommandHandler/hc_jsonl_fields.c
+    Services/CommandHandler/hc_jsonl_parse.c
+    Services/CommandHandler/hc_jsonl_rsp.c
 )
 
-file(GLOB JSMN_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/Services/jsmn/*.c"
+set(JSMN_SOURCES
+    Services/jsmn/jsmn.c
+    Services/jsmn/jsmn_print_utils.c
+    Services/jsmn/jsmn_utils.c
+    Services/jsmn/json_cmd_launcher.c
 )
 
-file(GLOB RING_BUFFER_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/Services/RingBuffer/*.c"
+set(RING_BUFFER_SOURCES
+    Services/RingBuffer/ring_buffer.c
 )
 
 
