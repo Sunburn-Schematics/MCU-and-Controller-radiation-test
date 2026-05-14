@@ -55,7 +55,7 @@ Automation should mirror the manual CMake Tools workflow rather than call compil
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Tools/build.ps1 -Preset Debug -DryRun
-powershell -NoProfile -ExecutionPolicy Bypass -File Tools/build.ps1 -Preset Debug
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools/build.ps1 -Preset Debug -Backend Commands -PerCommandTimeoutSeconds 30
 ```
 
 The wrapper discovers the installed STM32 VS Code extension paths, prepends the same `cube-cmake` and STM32 binary paths used by the STM32 VS Code extensions, and operates on the CMake-generated Ninja graph under `build/<preset>/`.
@@ -63,6 +63,20 @@ The wrapper discovers the installed STM32 VS Code extension paths, prepends the 
 The default backend is `-Backend Commands`. It asks Ninja for the generated command list with `ninja -t commands <target>`, then executes those generated compile and link commands one at a time with per-command timeouts and captured logs. This keeps automation synchronized with the manual CMake Tools build graph while avoiding the observed Ninja scheduler hang in this environment.
 
 Use `-Backend Ninja` or `-Backend CubeCMake` only when comparing behavior against the normal manual build layers.
+
+See `Tools/build_notes.md` for the detailed Codex build procedure, synchronization checks, and recovery steps for interrupted Ninja diagnostics.
+
+## Programming notes
+
+Program and verify the connected STM32F411 target with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools/program.ps1
+```
+
+The script uses ST-Link/SWD through OpenOCD to program and verify `build/Debug/HC_FW_BlackPill.elf`, then discovers the USB CDC/VCP port and verifies runtime firmware response with `GET args.sw_version:true`. Do not assume the VCP port is always `COM7`; use `-PortName COMx` only when multiple USB serial devices are connected.
+
+See `Tools/program_notes.md` for the detailed programming and target-verification procedure.
 
 ## Repository inclusion notes
 

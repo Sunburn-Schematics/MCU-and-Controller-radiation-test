@@ -8,6 +8,51 @@ Current intended target:
 - Build graph: `build/Debug/build.ninja`
 - Linker script: `STM32F411XX_FLASH.ld`
 
+Complete build-to-hardware loop:
+1. Make the smallest source change needed for the test.
+2. Run the guarded build:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\build.ps1 -Preset Debug -Backend Commands -PerCommandTimeoutSeconds 30`
+3. Confirm build exit code `0`, review warnings, and check RAM/FLASH usage.
+4. Program and verify the target:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\program.ps1`
+5. Confirm programming output includes:
+   - `DBGMCU_IDCODE: 0x10006431`
+   - `program/verify: OK`
+   - `runtime sw_version: ...`
+6. For behavior that cannot be fully verified over USB, ask the user for hardware observation.
+
+Proven end-to-end hardware test:
+- Source change: `App/fw_app.c` changed `HEARTBEAT_PERIOD_MS` from `500U` to `250U`.
+- Expected effect: Blue LED heartbeat toggle period is halved, so the visible flash rate doubles.
+- Build result: guarded Debug build completed with exit code `0`.
+- Program result: OpenOCD programmed and verified the ELF, then runtime USB CDC `GET sw_version` succeeded.
+- Hardware result: user confirmed the actual target BLUE LED flash rate doubled.
+
+Codex build procedure:
+1. Do not invoke direct real Ninja builds from Codex for this project:
+   - Avoid `ninja -C build/Debug ...`
+   - Avoid `cube-cmake --build ...`
+   - Avoid `Tools\build.ps1 -Backend Ninja`
+   - Avoid `Tools\build.ps1 -Backend CubeCMake`
+2. Use the guarded command-list backend:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\build.ps1 -Preset Debug -Backend Commands -PerCommandTimeoutSeconds 30`
+3. Use dry-run/query commands only when inspecting the generated graph:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\build.ps1 -Preset Debug -Backend Commands -DryRun`
+   - `ninja -C build\Debug -t commands HC_FW_BlackPill.elf`
+   - `ninja -C build\Debug -n -v HC_FW_BlackPill.elf`
+4. Keep an outer command timeout on any Codex shell invocation of the wrapper.
+5. After any interrupted or timed-out build diagnostic, check for and stop leftover build tools:
+   - `ninja`
+   - `cube-cmake`
+   - `cmake`
+   - `cmd`
+   - `arm-none-eabi-gcc`
+   - `arm-none-eabi-g++`
+   - `arm-none-eabi-ld`
+6. Remove stale generated lock files if a Ninja diagnostic was interrupted:
+   - `build\Debug\.ninja_lock`
+7. Treat a successful manual VS Code/CMake Tools build as the authoritative validation that the normal Ninja scheduler state is healthy.
+
 Primary build flow:
 1. Configure the project through VS Code CMake Tools or the STM32 `cube-cmake` frontend so `build/<Preset>/build.ninja` and `compile_commands.json` are generated from `CMakePresets.json` and the top-level `CMakeLists.txt`.
 2. Run `Tools\build.ps1`. The script discovers the installed STM32 VS Code extension folders for:
@@ -17,8 +62,13 @@ Primary build flow:
 4. The script resolves `cube-cmake` and the STM32-managed Ninja binary.
 5. The default `Commands` backend asks Ninja for the generated target command list:
    - `ninja -C build/<Preset> -t commands <Target>`
-6. The script executes each generated command serially through `cmd.exe`, using a per-command timeout and writing timestamped stdout/stderr logs under `build/<Preset>/`.
-7. If a command times out, the script stops build-tool child processes started after that command began and exits with code `124`.
+6. Before executing commands, the script backs up Ninja scheduler state that may already exist:
+   - `.ninja_deps`
+   - `.ninja_log`
+   - existing `*.obj.d` depfiles
+7. The script executes each generated command serially through `cmd.exe`, using a per-command timeout and writing timestamped stdout/stderr logs under `build/<Preset>/`.
+8. After the command-list build, the script restores the backed-up Ninja scheduler state and removes any stale `.ninja_lock`.
+9. If a command times out, the script stops build-tool child processes started after that command began and exits with code `124`.
 
 Synchronization checks:
 - `.vscode/settings.json` should keep `cmake.cmakePath` set to `cube-cmake`.
@@ -30,6 +80,7 @@ Synchronization checks:
 - `build/<Preset>/build.ninja` should reference `startup_stm32f411xe.s` and `STM32F411XX_FLASH.ld`.
 - `build/<Preset>/build.ninja` should not contain `VerifyGlobs` or `cmake.verify_globs`; source registration is intentionally explicit to avoid regeneration hangs.
 - The wrapper now warns when the discovered STM32 extension paths drift from the paths configured for VS Code CMake Tools.
+- The `Commands` backend should not be used as proof that Ninja's incremental scheduler is healthy; it is a bounded compile/link verification path that preserves existing Ninja state where possible.
 
 Progress:
 - Replaced `CONFIGURE_DEPENDS` source globs with explicit source lists in `CMakeLists.txt`.
@@ -37,6 +88,9 @@ Progress:
 - Wrapper dry-run reaches the generated compile and link actions.
 - Wrapper timeout cleanup returns control and leaves no build-tool processes behind.
 - Added a command-list backend that reads the generated Ninja commands and executes them one at a time with per-command timeouts.
+- Fixed the VS Code settings comparison to normalize `/` and `\` path separators before warning about drift.
+- Added preservation of existing `.ninja_deps`, `.ninja_log`, and `*.obj.d` files around command-list builds so the fallback does not further desynchronize the manual VS Code/Ninja state.
+- Verified the guarded command-list build after a user-performed CMake cache delete and reconfigure.
 - Completed a guarded Debug build with:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\build.ps1 -Preset Debug -Backend Commands -PerCommandTimeoutSeconds 30`
   - Exit code: `0`
@@ -46,6 +100,8 @@ Progress:
 Known issue:
 - The normal Ninja scheduler path still hangs in this environment. Keep `-Backend Commands` as the default automation path until the scheduler issue is isolated.
 - The command-list backend intentionally rebuilds the generated commands instead of using Ninja's incremental scheduler.
+- Direct Ninja diagnostics show that `ninja -t ...` graph queries work, but command execution hangs before spawning child commands in this Codex runner. This reproduces even with a tiny standalone probe `build.ninja` that runs `cmd.exe /C echo ...`, so the issue is not specific to the STM32 compile/link commands.
+- Earlier diagnostics removed `.ninja_deps` from `build/Debug` after backing it up. A manual VS Code/Ninja build may need to rebuild once to repopulate that database.
 
 Warnings from the first successful guarded build:
 - `Services/CommandHandler/hc_datetime.c`: `snprintf` date/time buffer truncation warning in `hc_datetime_ensure_initialized`.

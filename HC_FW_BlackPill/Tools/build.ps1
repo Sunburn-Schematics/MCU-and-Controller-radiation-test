@@ -154,6 +154,32 @@ function Stop-BuildProcessesStartedAfter {
         Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
+function Normalize-PathForCompare {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    return $Path.Replace('\', '/').TrimEnd('/').ToLowerInvariant()
+}
+
+function Get-RelativePathCompat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BasePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ChildPath
+    )
+
+    $base = [System.IO.Path]::GetFullPath($BasePath).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $child = [System.IO.Path]::GetFullPath($ChildPath)
+    $baseUri = [System.Uri]::new($base)
+    $childUri = [System.Uri]::new($child)
+
+    return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($childUri).ToString()).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+}
+
 # Warn when the checked-in VS Code settings no longer point at the same STM32
 # extension tools this wrapper discovered. The wrapper can still run, but a warning
 # means the automated path and the manual CMake Tools path may have drifted.
@@ -193,13 +219,52 @@ function Test-VSCodeCMakeSettings {
     $configurePath = $settings.'cmake.configureEnvironment'.PATH
     $buildPath = $settings.'cmake.buildEnvironment'.PATH
     foreach ($requiredPath in @($CubeCmakePath, $CoreBinaryPath)) {
-        if ($configurePath -and $configurePath -notlike "*$requiredPath*") {
+        $required = Normalize-PathForCompare $requiredPath
+        $configure = if ($configurePath) { Normalize-PathForCompare $configurePath } else { '' }
+        $build = if ($buildPath) { Normalize-PathForCompare $buildPath } else { '' }
+
+        if ($configurePath -and $configure -notlike "*$required*") {
             Write-Warning "VS Code configure PATH does not contain discovered STM32 tool path: $requiredPath"
         }
-        if ($buildPath -and $buildPath -notlike "*$requiredPath*") {
+        if ($buildPath -and $build -notlike "*$required*") {
             Write-Warning "VS Code build PATH does not contain discovered STM32 tool path: $requiredPath"
         }
     }
+}
+
+function Backup-FileIfPresent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$BackupRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+
+    $backupPath = Join-Path $BackupRoot ([System.IO.Path]::GetFileName($Path))
+    Copy-Item -LiteralPath $Path -Destination $backupPath -Force
+    return [pscustomobject]@{
+        Path = $Path
+        BackupPath = $backupPath
+    }
+}
+
+function Restore-FileBackup {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [pscustomobject]$Backup
+    )
+
+    if (-not $Backup) {
+        return
+    }
+
+    Copy-Item -LiteralPath $Backup.BackupPath -Destination $Backup.Path -Force
 }
 
 # Reliable backend: extract the exact commands from the generated Ninja graph and
@@ -232,50 +297,86 @@ function Invoke-CommandListBuild {
         return $LASTEXITCODE
     }
 
+    $stateBackupRoot = Join-Path $BuildDirectory ".cb_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+    New-Item -ItemType Directory -Force -Path $stateBackupRoot | Out-Null
+    $ninjaDepsBackup = Backup-FileIfPresent -Path (Join-Path $BuildDirectory '.ninja_deps') -BackupRoot $stateBackupRoot
+    $ninjaLogBackup = Backup-FileIfPresent -Path (Join-Path $BuildDirectory '.ninja_log') -BackupRoot $stateBackupRoot
+    $depfileBackups = @(
+        Get-ChildItem -Path $BuildDirectory -Recurse -File -Filter '*.obj.d' -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notlike (Join-Path $BuildDirectory '.codex_ninja_state_backup_*') + '*' } |
+            ForEach-Object {
+                $relative = Get-RelativePathCompat -BasePath $BuildDirectory -ChildPath $_.FullName
+                $backupPath = Join-Path $stateBackupRoot $relative
+                try {
+                    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
+                    Copy-Item -LiteralPath $_.FullName -Destination $backupPath -Force
+                    [pscustomobject]@{
+                        Path = $_.FullName
+                        BackupPath = $backupPath
+                    }
+                } catch {
+                    "warning: failed to back up depfile $($_.FullName): $_" | Add-Content -Path $StderrPath
+                    $null
+                }
+            }
+    )
+
     "command count: $($commands.Count)" | Set-Content -Path $StdoutPath
+    "ninja state backup: $stateBackupRoot" | Add-Content -Path $StdoutPath
     "" | Set-Content -Path $StderrPath
 
-    $index = 0
-    foreach ($command in $commands) {
-        $index++
-        "[$index/$($commands.Count)] $command" | Add-Content -Path $StdoutPath
+    try {
+        $index = 0
+        foreach ($command in $commands) {
+            $index++
+            "[$index/$($commands.Count)] $command" | Add-Content -Path $StdoutPath
 
-        # Commands emitted by Ninja are Windows shell command lines, so execute
-        # them through cmd.exe while still applying a timeout to each command.
-        $startTime = Get-Date
-        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = $env:ComSpec
-        $startInfo.Arguments = "/d /s /c $command"
-        $startInfo.WorkingDirectory = $BuildDirectory
-        $startInfo.UseShellExecute = $false
-        $startInfo.CreateNoWindow = $true
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
+            # Commands emitted by Ninja are Windows shell command lines, so execute
+            # them through cmd.exe while still applying a timeout to each command.
+            $startTime = Get-Date
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = $env:ComSpec
+            $startInfo.Arguments = "/d /s /c $command"
+            $startInfo.WorkingDirectory = $BuildDirectory
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
 
-        $process = [System.Diagnostics.Process]::new()
-        $process.StartInfo = $startInfo
-        [void]$process.Start()
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $startInfo
+            [void]$process.Start()
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
 
-        $completed = $process.WaitForExit($PerCommandTimeout * 1000)
-        if (-not $completed) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            Stop-BuildProcessesStartedAfter -StartTime $startTime
-            try { $stdoutTask.GetAwaiter().GetResult() | Add-Content -Path $StdoutPath } catch {}
-            try { $stderrTask.GetAwaiter().GetResult() | Add-Content -Path $StderrPath } catch {}
-            "timeout after ${PerCommandTimeout}s: $command" | Add-Content -Path $StderrPath
-            return 124
+            $completed = $process.WaitForExit($PerCommandTimeout * 1000)
+            if (-not $completed) {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                Stop-BuildProcessesStartedAfter -StartTime $startTime
+                try { $stdoutTask.GetAwaiter().GetResult() | Add-Content -Path $StdoutPath } catch {}
+                try { $stderrTask.GetAwaiter().GetResult() | Add-Content -Path $StderrPath } catch {}
+                "timeout after ${PerCommandTimeout}s: $command" | Add-Content -Path $StderrPath
+                return 124
+            }
+
+            $process.Refresh()
+            $stdoutTask.GetAwaiter().GetResult() | Add-Content -Path $StdoutPath
+            $stderrTask.GetAwaiter().GetResult() | Add-Content -Path $StderrPath
+
+            if ($process.ExitCode -ne 0) {
+                "command failed with exit code $($process.ExitCode): $command" | Add-Content -Path $StderrPath
+                return $process.ExitCode
+            }
+        }
+    } finally {
+        Restore-FileBackup -Backup $ninjaDepsBackup
+        Restore-FileBackup -Backup $ninjaLogBackup
+        foreach ($backup in $depfileBackups) {
+            Restore-FileBackup -Backup $backup
         }
 
-        $process.Refresh()
-        $stdoutTask.GetAwaiter().GetResult() | Add-Content -Path $StdoutPath
-        $stderrTask.GetAwaiter().GetResult() | Add-Content -Path $StderrPath
-
-        if ($process.ExitCode -ne 0) {
-            "command failed with exit code $($process.ExitCode): $command" | Add-Content -Path $StderrPath
-            return $process.ExitCode
-        }
+        # A killed Ninja diagnostic can leave this generated lock file behind.
+        Remove-Item -LiteralPath (Join-Path $BuildDirectory '.ninja_lock') -Force -ErrorAction SilentlyContinue
     }
 
     return 0
