@@ -42,3 +42,5 @@ The LTC3901 manager accepts these external commands:
 - `RESET`: transition from the current state to `RESET`. RESET disables `nLTC3901_Pwr_En`, `SDRA_DRV`, and `SDRB_DRV`, and clears `Power_Fault_Count` and `Sync_Fault_Count`.
 
 `HALT` is only entered via external command. Internal fault or timing transitions do not enter `HALT`.
+
+`Power_Fault_MAX = 0` disables the LTC3901 power retry-count limit. In that configuration, `POWER_FAULT` retries by entering `POWER_UP` after each `Power_Retry_Delay` interval indefinitely until power-up succeeds or a command changes state.

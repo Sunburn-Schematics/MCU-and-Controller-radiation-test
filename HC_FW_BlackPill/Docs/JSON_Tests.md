@@ -7,12 +7,12 @@ This document provides simple test vectors for the current first-slice HC comman
 Current implemented scope:
 - command processor frames one complete top-level JSON object from the USB byte stream
 - `CommandHandler` supports `SET` and `GET`
-- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, `args.adc_cal`, `args.ltc3901_cmd`, and `args.lt8316_cmd`
+- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, `args.adc_cal`, `args.ltc3901_cmd`, `args.lt8316_cmd`, `args.ltc3901_cfg`, and `args.lt8316_cfg`
 - `SET` also supports `args.dbg_signals` as an object for setting digital signal values (power enables and LEDs)
 - a `SET` request may include multiple supported fields; all valid fields are applied and the response contains one combined `args` object
-- `GET` currently supports `args.date_time`, `args.sw_version`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, and `args.adc_cal`
+- `GET` currently supports `args.date_time`, `args.sw_version`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, `args.adc_cal`, `args.ltc3901_cfg`, and `args.lt8316_cfg`
 - timestamps use seconds-only format: `YYYYMMDD HH:MM:SS`
-- current temporary HC identifier in responses is `1`
+- `RSP.hc`, `EVT.hc`, and periodic `STS.hc_id` use the same HC identifier sourced from board status
 - periodic `STS` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
 - `args.sts_period_ms = 0` disables periodic `STS` transmission
 - periodic `DBG` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
@@ -298,7 +298,79 @@ Notes:
 
 ---
 
-### 15. Valid combined `SET` command
+### 15. Valid `GET LTC3901 manager config`
+
+Request:
+```json
+{"type":"GET","msg":126,"args":{"ltc3901_cfg":true}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":126,"ts":"20260501 10:30:00","args":{"ltc3901_cfg":{"isupply_ma_max":50,"vupstream_mv_min":10000,"ltc3901_vcc_mv_min":10000,"power_up_timeout_ms":2000,"power_retry_delay_ms":1000,"power_fault_max":3,"sync_on_delay_ms":1000,"sync_hold_on_time_ms":10000,"sync_hold_off_time_ms":2000,"sync_stabilization_time_ms":100,"sync_fault_delay_ms":1000}}}
+```
+
+Notes:
+- `args.ltc3901_cfg` is a boolean selector for `GET`
+- all LTC3901 manager runtime config fields are returned
+
+---
+
+### 16. Valid `SET LTC3901 manager config`
+
+Request:
+```json
+{"type":"SET","msg":127,"args":{"ltc3901_cfg":{"isupply_ma_max":75,"power_up_timeout_ms":2500}}}
+```
+
+Expected response shape:
+```json
+{"type":"RSP","hc":1,"msg":127,"ts":"20260501 10:30:00","args":{"ltc3901_cfg":{"isupply_ma_max":75,"vupstream_mv_min":10000,"ltc3901_vcc_mv_min":10000,"power_up_timeout_ms":2500,"power_retry_delay_ms":1000,"power_fault_max":3,"sync_on_delay_ms":1000,"sync_hold_on_time_ms":10000,"sync_hold_off_time_ms":2000,"sync_stabilization_time_ms":100,"sync_fault_delay_ms":1000}}}
+```
+
+Notes:
+- `SET args.ltc3901_cfg` accepts partial updates
+- the response echoes the resulting full runtime config
+
+---
+
+### 17. Valid `GET LT8316 manager config`
+
+Request:
+```json
+{"type":"GET","msg":128,"args":{"lt8316_cfg":true}}
+```
+
+Expected response:
+```json
+{"type":"RSP","hc":1,"msg":128,"ts":"20260501 10:30:00","args":{"lt8316_cfg":{"power_retry_delay_ms":1000,"power_fault_max":3,"power_on_stabilization_time_ms":1000}}}
+```
+
+Notes:
+- `args.lt8316_cfg` is a boolean selector for `GET`
+- all LT8316 manager runtime config fields are returned
+
+---
+
+### 18. Valid `SET LT8316 manager config`
+
+Request:
+```json
+{"type":"SET","msg":129,"args":{"lt8316_cfg":{"power_retry_delay_ms":1500,"power_fault_max":4}}}
+```
+
+Expected response shape:
+```json
+{"type":"RSP","hc":1,"msg":129,"ts":"20260501 10:30:00","args":{"lt8316_cfg":{"power_retry_delay_ms":1500,"power_fault_max":4,"power_on_stabilization_time_ms":1000}}}
+```
+
+Notes:
+- `SET args.lt8316_cfg` accepts partial updates
+- the response echoes the resulting full runtime config
+
+---
+
+### 19. Valid combined `SET` command
 
 Request:
 ```json
@@ -317,7 +389,7 @@ Notes:
 
 ---
 
-### 16. Valid `GET adc_cal`
+### 20. Valid `GET adc_cal`
 
 Request:
 ```json
@@ -331,7 +403,7 @@ Expected response:
 
 ---
 
-### 17. Valid `SET adc_cal` with channel name
+### 21. Valid `SET adc_cal` with channel name
 
 Request:
 ```json
@@ -349,7 +421,7 @@ Notes:
 
 ---
 
-### 18. Valid `GET adc_cal` with channel name
+### 22. Valid `GET adc_cal` with channel name
 
 Request:
 ```json
@@ -363,7 +435,7 @@ Expected response:
 
 ---
 
-### 19. Valid JSON preceded or followed by non-JSON noise bytes
+### 23. Valid JSON preceded or followed by non-JSON noise bytes
 
 Example input stream:
 ```text
@@ -444,7 +516,7 @@ Fault/retry examples:
 
 These are valid JSON syntactically, but should produce an error response because they are unsupported or invalid for the current implementation.
 
-### 20. Unsupported packet type `EXC`
+### 24. Unsupported packet type `EXC`
 
 Request:
 ```json
@@ -462,7 +534,7 @@ Notes:
 
 ---
 
-### 21. Missing supported field in `SET`
+### 25. Missing supported field in `SET`
 
 Request:
 ```json
@@ -471,12 +543,12 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cmd, or lt8316_cmd"}}
+{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cmd, lt8316_cmd, ltc3901_cfg, or lt8316_cfg"}}
 ```
 
 ---
 
-### 22. `args.date_time` wrong format in `SET`
+### 26. `args.date_time` wrong format in `SET`
 
 Request:
 ```json
@@ -494,7 +566,7 @@ Notes:
 
 ---
 
-### 23. Invalid calendar/time value in `SET`
+### 27. Invalid calendar/time value in `SET`
 
 Request:
 ```json
@@ -508,7 +580,7 @@ Expected response could / should be:
 
 ---
 
-### 24. Invalid `args.sts_period_ms` type in `SET`
+### 28. Invalid `args.sts_period_ms` type in `SET`
 
 Request:
 ```json
@@ -522,7 +594,7 @@ Expected response could / should be:
 
 ---
 
-### 25. `GET` missing `args`
+### 29. `GET` missing `args`
 
 Request:
 ```json
@@ -536,7 +608,7 @@ Expected response could / should be:
 
 ---
 
-### 26. `GET` missing supported field
+### 30. `GET` missing supported field
 
 Request:
 ```json
@@ -545,12 +617,12 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports args.date_time, args.sw_version, args.raw_adc, dbg_period_ms, dbg_signals, or adc_cal"}}
+{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports args.date_time, args.sw_version, args.raw_adc, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cfg, or lt8316_cfg"}}
 ```
 
 ---
 
-### 27. Invalid `SET dbg_period_ms`
+### 31. Invalid `SET dbg_period_ms`
 
 Request:
 ```json
@@ -564,7 +636,7 @@ Expected response could / should be:
 
 ---
 
-### 28. Invalid `SET dbg_signals`
+### 32. Invalid `SET dbg_signals`
 
 Request:
 ```json
@@ -578,7 +650,7 @@ Expected response could / should be:
 
 ---
 
-### 29. Invalid `SET adc_cal`
+### 33. Invalid `SET adc_cal`
 
 Request:
 ```json
@@ -592,7 +664,7 @@ Expected response could / should be:
 
 ---
 
-### 30. Invalid `GET dbg_signals`
+### 34. Invalid `GET dbg_signals`
 
 Request:
 ```json
@@ -606,7 +678,7 @@ Expected response could / should be:
 
 ---
 
-### 31. `GET args.date_time` not `true`
+### 35. `GET args.date_time` not `true`
 
 Request:
 ```json
@@ -620,7 +692,7 @@ Expected response could / should be:
 
 ---
 
-### 32. Non-numeric `msg`
+### 36. Non-numeric `msg`
 
 Request:
 ```json
@@ -641,7 +713,7 @@ Notes:
 
 These inputs should be used to validate JSON framing, malformed-object handling, and parser robustness.
 
-### 33. Missing closing brace
+### 37. Missing closing brace
 
 Request:
 ```json
@@ -657,7 +729,7 @@ Notes:
 
 ---
 
-### 34. Extra closing brace
+### 38. Extra closing brace
 
 Request:
 ```json
@@ -675,7 +747,7 @@ Expected first response:
 
 ---
 
-### 35. Unquoted key
+### 39. Unquoted key
 
 Request:
 ```json
@@ -689,7 +761,7 @@ Expected response could / should be:
 
 ---
 
-### 36. Unterminated string
+### 40. Unterminated string
 
 Request:
 ```json
@@ -705,7 +777,7 @@ Notes:
 
 ---
 
-### 37. Top-level array instead of object
+### 41. Top-level array instead of object
 
 Request:
 ```json
@@ -727,7 +799,7 @@ Notes:
 
 ---
 
-### 38. Oversized JSON object
+### 42. Oversized JSON object
 
 Request:
 ```json
@@ -746,7 +818,7 @@ Notes:
 
 ## Back-to-back object examples
 
-### 39. Two valid objects in one input stream
+### 43. Two valid objects in one input stream
 
 Input stream:
 ```text

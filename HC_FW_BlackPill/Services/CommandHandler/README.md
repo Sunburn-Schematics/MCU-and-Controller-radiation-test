@@ -14,14 +14,17 @@ Initial vertical slice only:
 - validate `args.dbg_signals`
 - validate `args.adc_cal`
 - validate `args.ltc3901_cmd` and `args.lt8316_cmd`
+- validate `args.ltc3901_cfg` and `args.lt8316_cfg`
 - store current HC date/time value
 - store periodic `STS` interval in milliseconds
 - store periodic `DBG` interval and selected debug signal subset
 - store per-channel ADC engineering-unit calibration factors
 - forward LTC3901 `RUN`, `HALT`, and `RESET` commands to the application manager facade
 - forward LT8316 `RUN` and `RESET` commands to the application manager facade
+- update and return runtime DUT manager configuration values
 - apply all supported fields present in one `SET args` object and return one combined `RSP args` object
 - build `RSP` success/error packets and asynchronous `EVT` packets
+- populate `RSP.hc` from the same application status HC ID used by periodic `STS.hc_id`
 
 ## Planned files
 
@@ -56,6 +59,10 @@ These files are integrated into the USB RX/TX path and application loop for the 
 {"type":"SET","msg":11,"args":{"ltc3901_cmd":"RESET"}}
 {"type":"SET","msg":12,"args":{"lt8316_cmd":"RUN"}}
 {"type":"SET","msg":13,"args":{"lt8316_cmd":"RESET"}}
+{"type":"GET","msg":14,"args":{"ltc3901_cfg":true}}
+{"type":"SET","msg":15,"args":{"ltc3901_cfg":{"isupply_ma_max":50,"power_up_timeout_ms":2000}}}
+{"type":"GET","msg":16,"args":{"lt8316_cfg":true}}
+{"type":"SET","msg":17,"args":{"lt8316_cfg":{"power_retry_delay_ms":1000,"power_fault_max":3}}}
 {"type":"SET","msg":0,"args":{"date_time":"20260501 14:57:09","Something":"Does this work"}}
 ```
 

@@ -18,6 +18,13 @@ static uint32_t elapsed_ms(uint32_t now_ms, uint32_t then_ms)
     return now_ms - then_ms;
 }
 
+static bool power_retry_allowed(const lt8316_manager_t *manager,
+                                const lt8316_manager_config_t *config)
+{
+    return (config->power_fault_max == 0U) ||
+           (manager->power_fault_count < config->power_fault_max);
+}
+
 static void emit(lt8316_manager_t *manager,
                  lt8316_manager_event_t event)
 {
@@ -115,7 +122,7 @@ static void state_fault(lt8316_manager_t *manager,
 
     in_state_ms = elapsed_ms(inputs->now_ms, manager->entered_ms);
     if ((in_state_ms > config->power_retry_delay_ms) &&
-        (manager->power_fault_count < config->power_fault_max))
+        power_retry_allowed(manager, config))
     {
         enter_state(manager,
                     LT8316_MGR_STATE_POWERED,

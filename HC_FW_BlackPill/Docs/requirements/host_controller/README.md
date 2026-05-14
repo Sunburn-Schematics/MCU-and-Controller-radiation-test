@@ -17,7 +17,6 @@ This folder contains the preliminary Host Controller requirements and specificat
 - `hc_dut_monitor_functions_spec_v1.md`
 - `hc_product_specification_amalgamated_v1.md`
 - `hc_product_specification_review_v1.md`
-- `ltc3901_manager_active_object_draft.c` - review-only draft implementation sketch derived from `../LTC3901_Monitor_STT.xlsx`; not part of the firmware build.
 
 ## Notes
 

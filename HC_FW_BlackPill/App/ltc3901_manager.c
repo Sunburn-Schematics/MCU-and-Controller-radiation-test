@@ -67,6 +67,13 @@ static bool power_good(const ltc3901_manager_inputs_t *inputs,
            !isupply_too_high(inputs, config);
 }
 
+static bool power_retry_allowed(const ltc3901_manager_t *manager,
+                                const ltc3901_manager_config_t *config)
+{
+    return (config->power_fault_max == 0U) ||
+           (manager->power_fault_count < config->power_fault_max);
+}
+
 static void emit(ltc3901_manager_t *manager,
                  ltc3901_manager_event_t event)
 {
@@ -219,7 +226,7 @@ static void state_power_fault(ltc3901_manager_t *manager,
 
     in_state_ms = elapsed_ms(inputs->now_ms, manager->entered_ms);
     if ((in_state_ms > config->power_retry_delay_ms) &&
-        (manager->power_fault_count < config->power_fault_max))
+        power_retry_allowed(manager, config))
     {
         enter_state(manager,
                     LTC3901_MGR_STATE_POWER_UP,

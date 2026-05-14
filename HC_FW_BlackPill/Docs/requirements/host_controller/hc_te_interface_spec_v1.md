@@ -194,6 +194,10 @@ The TE should rely primarily on the HC periodic once-per-second `STS` message du
 | `SET_DUT2_POWER ON|OFF` | control DUT2 HV path | `OK` or `ERR` |
 | `SET_LTC3901_CMD RUN|HALT|RESET` | request LTC3901 manager command | `RSP` |
 | `SET_LT8316_CMD RUN|RESET` | request LT8316 manager command | `RSP` |
+| `SET_LTC3901_CFG <fields>` | update LTC3901 manager runtime configuration | `RSP` |
+| `GET_LTC3901_CFG` | return LTC3901 manager runtime configuration | `RSP` |
+| `SET_LT8316_CFG <fields>` | update LT8316 manager runtime configuration | `RSP` |
+| `GET_LT8316_CFG` | return LT8316 manager runtime configuration | `RSP` |
 | `GET_DUT1_POWER` | return commanded DUT1 power state | `RSP` |
 | `GET_DUT2_POWER` | return commanded DUT2 power state | `RSP` |
 | `SET_SYNC_ENABLE ON|OFF` | enable/disable DUT1 sync generation if exposed as a separate control | `OK` or `ERR` |
@@ -203,6 +207,9 @@ The TE should rely primarily on the HC periodic once-per-second `STS` message du
 - acceptance of power or sync commands depends on current HC state and safety policy
 - in the current JSONL implementation, LTC3901 manager commands are carried as `SET args.ltc3901_cmd` with values `RUN`, `HALT`, and `RESET`
 - in the current JSONL implementation, LT8316 manager commands are carried as `SET args.lt8316_cmd` with values `RUN` and `RESET`
+- in the current JSONL implementation, LTC3901 manager runtime configuration is carried as `SET args.ltc3901_cfg:{...}` and queried with `GET args.ltc3901_cfg:true`
+- in the current JSONL implementation, LT8316 manager runtime configuration is carried as `SET args.lt8316_cfg:{...}` and queried with `GET args.lt8316_cfg:true`
+- manager configuration SET commands accept partial objects and respond with the resulting full runtime configuration object
 - `HALT` disables LTC3901 power/sync outputs without clearing LTC3901 manager fault counters; `RESET` disables outputs and clears the manager fault counters
 - affected-DUT-only isolation policy means unrelated DUT controls should remain available unless a broader system rule blocks them
 
@@ -357,9 +364,9 @@ LT8316 states:
 
 #### 8.3.8 DUT Recovery / Restart Policy
 For v1, DUT-local recovery and restart behavior is owned by each DUT manager:
-- LTC3901 power/startup failures transition to `POWER_FAULT`, disable LTC3901 power and sync outputs, increment the LTC3901 power fault count, and retry by entering `POWER_UP` while the retry count remains below the configured maximum.
+- LTC3901 power/startup failures transition to `POWER_FAULT`, disable LTC3901 power and sync outputs, increment the LTC3901 power fault count, and retry by entering `POWER_UP` while the retry count remains below the configured maximum. A configured LTC3901 `power_fault_max` value of `0` disables the retry-count limit and permits indefinite retries.
 - LTC3901 sync activity failures transition to `POWERED_SYNC_FAULT`, keep LTC3901 power enabled, disable sync outputs, increment the sync fault count, and retry sync by entering `POWERED_SYNC_ON` after the configured sync fault delay.
-- LT8316 gate/startup failures transition to `FAULT`, disable LT8316 HV power, increment the LT8316 fault count, and retry by entering `POWERED` while the retry count remains below the configured maximum.
+- LT8316 gate/startup failures transition to `FAULT`, disable LT8316 HV power, increment the LT8316 fault count, and retry by entering `POWERED` while the retry count remains below the configured maximum. A configured LT8316 `power_fault_max` value of `0` disables the retry-count limit and permits indefinite retries.
 - `RESET` commands return the affected manager to `RESET` and clear that manager's fault counters.
 - LTC3901 `HALT` returns the LTC3901 manager to `HALT` without clearing its fault counters.
 - Recovery actions apply to the affected DUT manager only unless a broader policy is added later.

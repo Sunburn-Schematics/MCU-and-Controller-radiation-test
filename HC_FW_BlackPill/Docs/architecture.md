@@ -330,6 +330,8 @@ Unavailable numeric measurements are formatted as JSON `null`.
 
 `ltc3901_manager` owns the DUT1 LTC3901 state table and produces hardware output intents. It does not call BSP or drivers directly. `fw_app.c` supplies sampled inputs and applies outputs.
 
+The LTC3901 manager runtime configuration is stored in `fw_app.c`, initialized from compile-time defaults, and consumed by the manager on each superloop pass. The current JSONL interface supports partial runtime updates through `SET args.ltc3901_cfg` and full readback through `GET args.ltc3901_cfg:true`.
+
 External LTC3901 commands are accepted through `SET args.ltc3901_cmd`:
 
 - `RUN`: transition from the current state to `POWER_UP`, then continue through normal manager flow
@@ -353,6 +355,8 @@ Current manager states are:
 
 `lt8316_manager` owns the DUT2 LT8316 state table and produces the HV power-enable output intent. It does not call BSP or drivers directly. `fw_app.c` supplies sampled inputs and applies outputs.
 
+The LT8316 manager runtime configuration is stored in `fw_app.c`, initialized from compile-time defaults, and consumed by the manager on each superloop pass. The current JSONL interface supports partial runtime updates through `SET args.lt8316_cfg` and full readback through `GET args.lt8316_cfg:true`.
+
 External LT8316 commands are accepted through `SET args.lt8316_cmd`. The compatibility debug signal `lt8316.pwr_en` maps `true` to `RUN` and `false` to `RESET`:
 
 - `RUN`: transition from the current state to `POWERED`
@@ -364,7 +368,7 @@ Current manager states are:
 - `FAULT`
 - `POWERED`
 
-`POWERED` asserts `HV_Pwr_En`. If the LT8316 gate frequency remains unavailable after the configured power-on stabilization time, the manager transitions to `FAULT`, disables `HV_Pwr_En`, increments its fault counter, and retries while the fault count remains below the configured limit.
+`POWERED` asserts `HV_Pwr_En`. If the LT8316 gate frequency remains unavailable after the configured power-on stabilization time, the manager transitions to `FAULT`, disables `HV_Pwr_En`, increments its fault counter, and retries while the fault count remains below the configured limit. A `power_fault_max` value of `0` disables the retry-count limit and allows indefinite LT8316 retries.
 
 ## Services Modules
 

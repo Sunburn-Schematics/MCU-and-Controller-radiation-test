@@ -9,10 +9,12 @@ extern "C" {
 #include <stdint.h>
 
 #include "hc_debug_telemetry.h"
+#include "lt8316_manager.h"
+#include "ltc3901_manager.h"
 #include "usb_vcp_drv.h"
 
 #ifndef SW_VERSION_STRING
-#define SW_VERSION_STRING "0.1.0"
+#define SW_VERSION_STRING "0.1.1"
 #endif
 
 typedef enum
@@ -33,6 +35,10 @@ void fw_app_run(void);
 bool fw_app_set_ltc3901_command(fw_app_ltc3901_command_t command);
 bool fw_app_set_lt8316_command(fw_app_lt8316_command_t command);
 const char *fw_app_get_sw_version(void);
+bool fw_app_get_ltc3901_config(ltc3901_manager_config_t *config_out);
+bool fw_app_set_ltc3901_config(const ltc3901_manager_config_t *config);
+bool fw_app_get_lt8316_config(lt8316_manager_config_t *config_out);
+bool fw_app_set_lt8316_config(const lt8316_manager_config_t *config);
 bool fw_app_set_sts_period_ms(uint32_t period_ms);
 uint32_t fw_app_get_sts_period_ms(void);
 bool fw_app_set_debug_config(const hc_debug_telemetry_config_t *config);

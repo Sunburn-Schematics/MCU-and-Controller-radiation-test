@@ -4,6 +4,8 @@
 #include "hc_cmd_types.h"
 #include "../jsmn/jsmn.h"
 #include "hc_debug_telemetry.h"
+#include "lt8316_manager.h"
+#include "ltc3901_manager.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,6 +63,40 @@ typedef struct
     bool Requested;
     uint32_t Channel;
 } hc_jsonl_get_adc_cal_request_t;
+
+typedef struct
+{
+    bool HasIsupplyMaMax;
+    bool HasVupstreamMvMin;
+    bool HasLtc3901VccMvMin;
+    bool HasPowerUpTimeoutMs;
+    bool HasPowerRetryDelayMs;
+    bool HasPowerFaultMax;
+    bool HasSyncOnDelayMs;
+    bool HasSyncHoldOnTimeMs;
+    bool HasSyncHoldOffTimeMs;
+    bool HasSyncStabilizationTimeMs;
+    bool HasSyncFaultDelayMs;
+    ltc3901_manager_config_t Config;
+} hc_jsonl_set_ltc3901_cfg_request_t;
+
+typedef struct
+{
+    bool Requested;
+} hc_jsonl_get_ltc3901_cfg_request_t;
+
+typedef struct
+{
+    bool HasPowerRetryDelayMs;
+    bool HasPowerFaultMax;
+    bool HasPowerOnStabilizationTimeMs;
+    lt8316_manager_config_t Config;
+} hc_jsonl_set_lt8316_cfg_request_t;
+
+typedef struct
+{
+    bool Requested;
+} hc_jsonl_get_lt8316_cfg_request_t;
 
 typedef struct
 {
@@ -127,6 +163,26 @@ hc_cmd_status_t hc_jsonl_parse_get_adc_calibration(const char *line,
                                                    const jsmntok_t *tokens,
                                                    const hc_cmd_request_t *request,
                                                    hc_jsonl_get_adc_cal_request_t *adc_cal_request_out);
+
+hc_cmd_status_t hc_jsonl_parse_set_ltc3901_cfg(const char *line,
+                                               const jsmntok_t *tokens,
+                                               const hc_cmd_request_t *request,
+                                               hc_jsonl_set_ltc3901_cfg_request_t *config_request_out);
+
+hc_cmd_status_t hc_jsonl_parse_get_ltc3901_cfg(const char *line,
+                                               const jsmntok_t *tokens,
+                                               const hc_cmd_request_t *request,
+                                               hc_jsonl_get_ltc3901_cfg_request_t *config_request_out);
+
+hc_cmd_status_t hc_jsonl_parse_set_lt8316_cfg(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request,
+                                              hc_jsonl_set_lt8316_cfg_request_t *config_request_out);
+
+hc_cmd_status_t hc_jsonl_parse_get_lt8316_cfg(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request,
+                                              hc_jsonl_get_lt8316_cfg_request_t *config_request_out);
 
 hc_cmd_status_t hc_jsonl_parse_set_digital_signals(const char *line,
                                                    const jsmntok_t *tokens,

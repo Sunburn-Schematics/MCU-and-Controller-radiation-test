@@ -8,7 +8,7 @@
 |         |                                                            |                                      |                                         |            |                  |                            |                               |       |
 | FAULT   | InState_tmr = 0<br>De-assert HV_Pwr_En<br>Fault_Count += 1 | RESET command                        |                                         | RESET      |                  |                            |                               | RESET clears fault counters. |
 |         |                                                            | RUN command                          |                                         | POWERED    |                  | EVT_MSG: Entering POWERED  |                               |       |
-|         |                                                            | InState_tmr > Power_Retry_Delay      | Fault_Count < Fault_MAX                 | POWERED    |                  | EVT_MSG: Retrying Power Up |                               |       |
+|         |                                                            | InState_tmr > Power_Retry_Delay      | Fault_MAX == 0 or Fault_Count < Fault_MAX | POWERED    |                  | EVT_MSG: Retrying Power Up |                               | Fault_MAX of 0 disables the retry-count limit. |
 |         |                                                            |                                      |                                         |            |                  |                            |                               |       |
 | POWERED | InState_tmr = 0<br>Assert HV_Pwr_En                        | Gate_Freq == null                    | InState_tmr > Pwr_On_Stabilization_Time | FAULT      |                  | EVT_MSG: GATE Stopped      |                               |       |
 
@@ -18,3 +18,5 @@ The LT8316 manager accepts these external commands:
 
 - `RUN`: transition from the current state to `POWERED`.
 - `RESET`: transition from the current state to `RESET`. RESET disables `HV_Pwr_En` and clears `Fault_Count`.
+
+`Fault_MAX = 0` disables the LT8316 power retry-count limit. In that configuration, `FAULT` retries by entering `POWERED` after each `Power_Retry_Delay` interval indefinitely until gate activity is detected or a command changes state.

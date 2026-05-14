@@ -5,13 +5,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define HC_CMD_HOST_CONTROLLER_ID       (1u)
-#define HC_CMD_MAX_LINE_LEN             (512u)
+#define HC_CMD_HOST_CONTROLLER_ID       (hc_cmd_get_host_controller_id())
+#define HC_CMD_MAX_LINE_LEN             (1024u)
 #define HC_CMD_MAX_TS_LEN               (18u)
 #define HC_CMD_MAX_DATE_TIME_LEN        (18u)
 #define HC_CMD_MAX_ERROR_CODE_LEN       (24u)
 #define HC_CMD_MAX_ERROR_MESSAGE_LEN    (96u)
-#define HC_CMD_MAX_TOKENS               (48u)
+#define HC_CMD_MAX_TOKENS               (96u)
 
 typedef enum
 {
@@ -51,5 +51,7 @@ typedef struct
     const char *error_code;
     const char *error_message;
 } hc_cmd_error_t;
+
+uint32_t hc_cmd_get_host_controller_id(void);
 
 #endif /* HC_CMD_TYPES_H_ */

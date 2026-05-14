@@ -10,3 +10,5 @@ mx.scratch/
 *.bin
 *.map
 *.list
+
+*.log

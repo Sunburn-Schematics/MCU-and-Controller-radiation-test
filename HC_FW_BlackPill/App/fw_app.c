@@ -33,7 +33,7 @@
 #define EVT_MESSAGE_BUFFER_SIZE (256U)
 #define EVT_SCOPED_MESSAGE_BUFFER_SIZE (288U)
 
-//Autostart will automatically issue a RUN command to the managers after startup.
+//Setting AUTOSTART_ENABLE to 1 will automatically issue a RUN command to the managers AUTOSTART_DELAY_MS after startup.
 #ifndef AUTOSTART_ENABLE
 #define AUTOSTART_ENABLE      (1U)
 #endif
@@ -41,20 +41,23 @@
 #define AUTOSTART_DELAY_MS    (5000U)
 #endif
 
-#define LTC3901_ISUPPLY_MAX_MA (50L)
-#define LTC3901_VUPSTREAM_MIN_MV (10000L)
-#define LTC3901_VCC_MIN_MV (10000L)
-#define LTC3901_POWER_UP_TIMEOUT_MS (2000U)
-#define LTC3901_POWER_RETRY_DELAY_MS (1000U)
-#define LTC3901_POWER_FAULT_MAX (3U)
-#define LTC3901_SYNC_ON_DELAY_MS (1000U)
-#define LTC3901_SYNC_HOLD_ON_TIME_MS (10000U)
-#define LTC3901_SYNC_HOLD_OFF_TIME_MS (2000U)
-#define LTC3901_SYNC_STABILIZATION_TIME_MS (100U)
-#define LTC3901_SYNC_FAULT_DELAY_MS (1000U)
-#define LT8316_POWER_RETRY_DELAY_MS (1000U)
-#define LT8316_POWER_FAULT_MAX (3U)
-#define LT8316_POWER_ON_STABILIZATION_TIME_MS (1000U)
+
+#define LTC3901_ISUPPLY_MAX_MA                  (50L)           //The maximum allowed LTC3901 current prior to a fault being logged.
+#define LTC3901_VUPSTREAM_MIN_MV                (10000L)        //The minimum allowed upstream voltage prior to a fault being logged.
+#define LTC3901_VCC_MIN_MV                      (10000L)        //The minimum allowed LTC3901 VCC voltage prior to a fault being logged.
+#define LTC3901_POWER_UP_TIMEOUT_MS             (2000U)         //The timeout for the power-up state.
+#define LTC3901_POWER_RETRY_DELAY_MS            (1000U)         //The delay before retrying power-up.
+#define LTC3901_POWER_FAULT_MAX                 (0U)            //The maximum number of power faults before entering a permanent fault state. 0 is infinite retries.
+#define LTC3901_SYNC_ON_DELAY_MS                (3000U)         //The delay after power up before SYNC is enabled
+#define LTC3901_SYNC_HOLD_ON_TIME_MS            (55000U)        //The time SYNC will be held ON for before being cycled OFF.
+#define LTC3901_SYNC_HOLD_OFF_TIME_MS           ( 5000U)        //The time SYNC will be held OFF for before being cycled ON again.
+#define LTC3901_SYNC_STABILIZATION_TIME_MS      (100U)          //The time after SYNC is enabled that ME and MF must become valid to avoid a fault.
+#define LTC3901_SYNC_FAULT_DELAY_MS             (1000U)         //The time after a SYNC fault is detected and the manager transitions to the FAULT state.    
+
+
+#define LT8316_POWER_RETRY_DELAY_MS             (1000U)
+#define LT8316_POWER_FAULT_MAX                  (0U)
+#define LT8316_POWER_ON_STABILIZATION_TIME_MS   (1000U)
 
 static uint32_t s_last_toggle_ms;
 static uint32_t s_last_sts_ms;
@@ -68,7 +71,7 @@ static lt8316_manager_t s_lt8316_manager;
 static lt8316_manager_outputs_t s_lt8316_outputs;
 static lt8316_manager_request_t s_lt8316_pending_request;
 
-static const ltc3901_manager_config_t s_ltc3901_config = {
+static ltc3901_manager_config_t s_ltc3901_config = {
     .isupply_ma_max = LTC3901_ISUPPLY_MAX_MA,
     .vupstream_mv_min = LTC3901_VUPSTREAM_MIN_MV,
     .ltc3901_vcc_mv_min = LTC3901_VCC_MIN_MV,
@@ -82,7 +85,7 @@ static const ltc3901_manager_config_t s_ltc3901_config = {
     .sync_fault_delay_ms = LTC3901_SYNC_FAULT_DELAY_MS,
 };
 
-static const lt8316_manager_config_t s_lt8316_config = {
+static lt8316_manager_config_t s_lt8316_config = {
     .power_retry_delay_ms = LT8316_POWER_RETRY_DELAY_MS,
     .power_fault_max = LT8316_POWER_FAULT_MAX,
     .power_on_stabilization_time_ms = LT8316_POWER_ON_STABILIZATION_TIME_MS,
@@ -526,6 +529,50 @@ bool fw_app_set_lt8316_command(fw_app_lt8316_command_t command)
 const char *fw_app_get_sw_version(void)
 {
     return SW_VERSION_STRING;
+}
+
+bool fw_app_get_ltc3901_config(ltc3901_manager_config_t *config_out)
+{
+    if (config_out == 0)
+    {
+        return false;
+    }
+
+    *config_out = s_ltc3901_config;
+    return true;
+}
+
+bool fw_app_set_ltc3901_config(const ltc3901_manager_config_t *config)
+{
+    if (config == 0)
+    {
+        return false;
+    }
+
+    s_ltc3901_config = *config;
+    return true;
+}
+
+bool fw_app_get_lt8316_config(lt8316_manager_config_t *config_out)
+{
+    if (config_out == 0)
+    {
+        return false;
+    }
+
+    *config_out = s_lt8316_config;
+    return true;
+}
+
+bool fw_app_set_lt8316_config(const lt8316_manager_config_t *config)
+{
+    if (config == 0)
+    {
+        return false;
+    }
+
+    s_lt8316_config = *config;
+    return true;
 }
 
 static void send_periodic_status(void)

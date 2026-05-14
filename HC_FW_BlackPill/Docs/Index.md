@@ -25,6 +25,7 @@ This file is the top-level reference for locating and editing the HC documentati
 - [hc_variable_registry_v1.md](./hc_variable_registry_v1.md) — Registry of named variable placeholders for deferred numeric values.
 - [hc_verification_traceability_matrix_v1.md](./hc_verification_traceability_matrix_v1.md) — Traceability from requirements to verification intent and coverage.
 - [Debug_Signals.md](./Debug_Signals.md) — Dictionary of supported `dbg_signals` names, types, units, sources, and null behavior.
+- [DUT_Manager_State_Charts.md](./DUT_Manager_State_Charts.md) — Mermaid state chart diagrams for the implemented LTC3901 and LT8316 DUT managers.
 - [JSON_Tests.md](./JSON_Tests.md) — Current JSON request/response test vectors for command processor framing, SET/GET date_time behavior, and malformed-input checks.
 - [architecture.md](./architecture.md) — Current firmware layering, module boundaries, and local-driver implementation notes.
 - [pin_connections.md](./pin_connections.md) — Current STM32F401 Black Pill target pin assignments and peripheral mappings.

@@ -43,6 +43,37 @@ static bool hc_jsonl_token_equals(const char *json, const jsmntok_t *token, cons
     return (strncmp(&json[token->start], text, text_len) == 0);
 }
 
+static int hc_jsonl_skip_token(const jsmntok_t *tokens, size_t token_count, int token_index)
+{
+    int next_index;
+    int child_count;
+    int i;
+
+    if ((tokens == NULL) || (token_index < 0) || ((size_t)token_index >= token_count))
+    {
+        return token_index + 1;
+    }
+
+    next_index = token_index + 1;
+    if ((tokens[token_index].type != JSMN_OBJECT) && (tokens[token_index].type != JSMN_ARRAY))
+    {
+        return next_index;
+    }
+
+    child_count = tokens[token_index].size;
+    if (tokens[token_index].type == JSMN_OBJECT)
+    {
+        child_count *= 2;
+    }
+
+    for (i = 0; (i < child_count) && ((size_t)next_index < token_count); ++i)
+    {
+        next_index = hc_jsonl_skip_token(tokens, token_count, next_index);
+    }
+
+    return next_index;
+}
+
 static int hc_jsonl_find_object_value(const char *json,
                                       const jsmntok_t *tokens,
                                       size_t token_count,
@@ -67,16 +98,19 @@ static int hc_jsonl_find_object_value(const char *json,
 
     while ((pair_count > 0) && ((size_t)i < token_count))
     {
-        if (hc_jsonl_token_equals(json, &tokens[i], key))
+        int value_index = i + 1;
+
+        if ((size_t)value_index >= token_count)
         {
-            if (((size_t)(i + 1)) < token_count)
-            {
-                return (i + 1);
-            }
             return -1;
         }
 
-        i += 2;
+        if (hc_jsonl_token_equals(json, &tokens[i], key))
+        {
+            return value_index;
+        }
+
+        i = hc_jsonl_skip_token(tokens, token_count, value_index);
         pair_count--;
     }
 
@@ -325,6 +359,94 @@ static hc_cmd_status_t hc_jsonl_parse_adc_channel_selector(const char *line,
     }
 
     return HC_CMD_OK;
+}
+
+static hc_cmd_status_t hc_jsonl_parse_get_bool_selector(const char *line,
+                                                        const jsmntok_t *tokens,
+                                                        const char *field_name,
+                                                        bool *requested_out)
+{
+    int args_index;
+    int field_index;
+
+    if ((line == NULL) || (tokens == NULL) || (field_name == NULL) || (requested_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    *requested_out = false;
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    field_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, field_name);
+    if (field_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (!hc_jsonl_token_is_primitive(&tokens[field_index]) ||
+        !hc_jsonl_token_equals(line, &tokens[field_index], "true"))
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    *requested_out = true;
+    return HC_CMD_OK;
+}
+
+static hc_cmd_status_t hc_jsonl_parse_optional_i32_field(const char *line,
+                                                        const jsmntok_t *tokens,
+                                                        int object_index,
+                                                        const char *field_name,
+                                                        bool *has_field_out,
+                                                        int32_t *value_out)
+{
+    int value_index;
+
+    if ((line == NULL) || (tokens == NULL) || (field_name == NULL) ||
+        (has_field_out == NULL) || (value_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    *has_field_out = false;
+    value_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, object_index, field_name);
+    if (value_index < 0)
+    {
+        return HC_CMD_OK;
+    }
+
+    *has_field_out = true;
+    return hc_jsonl_parse_i32_primitive(line, &tokens[value_index], value_out);
+}
+
+static hc_cmd_status_t hc_jsonl_parse_optional_u32_field(const char *line,
+                                                        const jsmntok_t *tokens,
+                                                        int object_index,
+                                                        const char *field_name,
+                                                        bool *has_field_out,
+                                                        uint32_t *value_out)
+{
+    int value_index;
+
+    if ((line == NULL) || (tokens == NULL) || (field_name == NULL) ||
+        (has_field_out == NULL) || (value_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    *has_field_out = false;
+    value_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, object_index, field_name);
+    if (value_index < 0)
+    {
+        return HC_CMD_OK;
+    }
+
+    *has_field_out = true;
+    return hc_jsonl_parse_u32_primitive(line, &tokens[value_index], value_out);
 }
 
 hc_cmd_status_t hc_jsonl_parse_request(const char *line,
@@ -1006,6 +1128,190 @@ hc_cmd_status_t hc_jsonl_parse_get_adc_calibration(const char *line,
 
     adc_cal_request_out->Requested = true;
     return hc_jsonl_parse_adc_channel_selector(line, &tokens[adc_cal_index], &adc_cal_request_out->Channel);
+}
+
+hc_cmd_status_t hc_jsonl_parse_set_ltc3901_cfg(const char *line,
+                                               const jsmntok_t *tokens,
+                                               const hc_cmd_request_t *request,
+                                               hc_jsonl_set_ltc3901_cfg_request_t *config_request_out)
+{
+    int args_index;
+    int config_index;
+    hc_cmd_status_t status;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL) || (config_request_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    memset(config_request_out, 0, sizeof(*config_request_out));
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    config_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "ltc3901_cfg");
+    if (config_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (tokens[config_index].type != JSMN_OBJECT)
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    status = hc_jsonl_parse_optional_i32_field(line, tokens, config_index, "isupply_ma_max",
+                                               &config_request_out->HasIsupplyMaMax,
+                                               &config_request_out->Config.isupply_ma_max);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_i32_field(line, tokens, config_index, "vupstream_mv_min",
+                                               &config_request_out->HasVupstreamMvMin,
+                                               &config_request_out->Config.vupstream_mv_min);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_i32_field(line, tokens, config_index, "ltc3901_vcc_mv_min",
+                                               &config_request_out->HasLtc3901VccMvMin,
+                                               &config_request_out->Config.ltc3901_vcc_mv_min);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "power_up_timeout_ms",
+                                               &config_request_out->HasPowerUpTimeoutMs,
+                                               &config_request_out->Config.power_up_timeout_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "power_retry_delay_ms",
+                                               &config_request_out->HasPowerRetryDelayMs,
+                                               &config_request_out->Config.power_retry_delay_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "power_fault_max",
+                                               &config_request_out->HasPowerFaultMax,
+                                               &config_request_out->Config.power_fault_max);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "sync_on_delay_ms",
+                                               &config_request_out->HasSyncOnDelayMs,
+                                               &config_request_out->Config.sync_on_delay_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "sync_hold_on_time_ms",
+                                               &config_request_out->HasSyncHoldOnTimeMs,
+                                               &config_request_out->Config.sync_hold_on_time_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "sync_hold_off_time_ms",
+                                               &config_request_out->HasSyncHoldOffTimeMs,
+                                               &config_request_out->Config.sync_hold_off_time_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "sync_stabilization_time_ms",
+                                               &config_request_out->HasSyncStabilizationTimeMs,
+                                               &config_request_out->Config.sync_stabilization_time_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "sync_fault_delay_ms",
+                                               &config_request_out->HasSyncFaultDelayMs,
+                                               &config_request_out->Config.sync_fault_delay_ms);
+    if (status != HC_CMD_OK) { return status; }
+
+    if (!config_request_out->HasIsupplyMaMax &&
+        !config_request_out->HasVupstreamMvMin &&
+        !config_request_out->HasLtc3901VccMvMin &&
+        !config_request_out->HasPowerUpTimeoutMs &&
+        !config_request_out->HasPowerRetryDelayMs &&
+        !config_request_out->HasPowerFaultMax &&
+        !config_request_out->HasSyncOnDelayMs &&
+        !config_request_out->HasSyncHoldOnTimeMs &&
+        !config_request_out->HasSyncHoldOffTimeMs &&
+        !config_request_out->HasSyncStabilizationTimeMs &&
+        !config_request_out->HasSyncFaultDelayMs)
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    return HC_CMD_OK;
+}
+
+hc_cmd_status_t hc_jsonl_parse_get_ltc3901_cfg(const char *line,
+                                               const jsmntok_t *tokens,
+                                               const hc_cmd_request_t *request,
+                                               hc_jsonl_get_ltc3901_cfg_request_t *config_request_out)
+{
+    (void)request;
+
+    if (config_request_out == NULL)
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    return hc_jsonl_parse_get_bool_selector(line, tokens, "ltc3901_cfg", &config_request_out->Requested);
+}
+
+hc_cmd_status_t hc_jsonl_parse_set_lt8316_cfg(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request,
+                                              hc_jsonl_set_lt8316_cfg_request_t *config_request_out)
+{
+    int args_index;
+    int config_index;
+    hc_cmd_status_t status;
+
+    (void)request;
+
+    if ((line == NULL) || (tokens == NULL) || (config_request_out == NULL))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    memset(config_request_out, 0, sizeof(*config_request_out));
+
+    if (hc_jsonl_get_args_object(line, tokens, &args_index) != HC_CMD_OK)
+    {
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    config_index = hc_jsonl_find_object_value(line, tokens, HC_CMD_MAX_TOKENS, args_index, "lt8316_cfg");
+    if (config_index < 0)
+    {
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (tokens[config_index].type != JSMN_OBJECT)
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "power_retry_delay_ms",
+                                               &config_request_out->HasPowerRetryDelayMs,
+                                               &config_request_out->Config.power_retry_delay_ms);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "power_fault_max",
+                                               &config_request_out->HasPowerFaultMax,
+                                               &config_request_out->Config.power_fault_max);
+    if (status != HC_CMD_OK) { return status; }
+    status = hc_jsonl_parse_optional_u32_field(line, tokens, config_index, "power_on_stabilization_time_ms",
+                                               &config_request_out->HasPowerOnStabilizationTimeMs,
+                                               &config_request_out->Config.power_on_stabilization_time_ms);
+    if (status != HC_CMD_OK) { return status; }
+
+    if (!config_request_out->HasPowerRetryDelayMs &&
+        !config_request_out->HasPowerFaultMax &&
+        !config_request_out->HasPowerOnStabilizationTimeMs)
+    {
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    return HC_CMD_OK;
+}
+
+hc_cmd_status_t hc_jsonl_parse_get_lt8316_cfg(const char *line,
+                                              const jsmntok_t *tokens,
+                                              const hc_cmd_request_t *request,
+                                              hc_jsonl_get_lt8316_cfg_request_t *config_request_out)
+{
+    (void)request;
+
+    if (config_request_out == NULL)
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    return hc_jsonl_parse_get_bool_selector(line, tokens, "lt8316_cfg", &config_request_out->Requested);
 }
 
 hc_cmd_status_t hc_jsonl_parse_set_digital_signals(const char *line,
