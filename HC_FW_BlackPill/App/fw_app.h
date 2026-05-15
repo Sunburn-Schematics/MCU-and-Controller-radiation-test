@@ -14,7 +14,7 @@ extern "C" {
 #include "usb_vcp_drv.h"
 
 #ifndef SW_VERSION_STRING
-#define SW_VERSION_STRING "0.1.1"
+#define SW_VERSION_STRING "0.1.2"
 #endif
 
 typedef enum
@@ -34,6 +34,7 @@ void fw_app_init(void);
 void fw_app_run(void);
 bool fw_app_set_ltc3901_command(fw_app_ltc3901_command_t command);
 bool fw_app_set_lt8316_command(fw_app_lt8316_command_t command);
+bool fw_app_request_system_reset(void);
 const char *fw_app_get_sw_version(void);
 bool fw_app_get_ltc3901_config(ltc3901_manager_config_t *config_out);
 bool fw_app_set_ltc3901_config(const ltc3901_manager_config_t *config);

@@ -18,6 +18,27 @@ static bool hc_jsonl_validate_adc_channel(uint32_t channel)
     return (channel < (uint32_t)ADC_SENSE_CHANNEL_COUNT);
 }
 
+static const char *hc_jsonl_get_adc_channel_name(uint32_t channel)
+{
+    static const char * const s_adc_channel_names[] = {
+        "vupstream",
+        "ltc3901_vcc",
+        "lt8316_vout",
+        "ltc3901_me",
+        "ltc3901_mf",
+        "lt8316_gate",
+        "temp",
+        "vrefint",
+    };
+
+    if (channel >= (uint32_t)(sizeof(s_adc_channel_names) / sizeof(s_adc_channel_names[0])))
+    {
+        return NULL;
+    }
+
+    return s_adc_channel_names[channel];
+}
+
 static bool hc_jsonl_apply_ltc3901_cmd(const char *command)
 {
     if (strcmp(command, "RUN") == 0)
@@ -48,6 +69,16 @@ static bool hc_jsonl_apply_lt8316_cmd(const char *command)
     if (strcmp(command, "RESET") == 0)
     {
         return fw_app_set_lt8316_command(FW_APP_LT8316_COMMAND_RESET);
+    }
+
+    return false;
+}
+
+static bool hc_jsonl_apply_hc_cmd(const char *command)
+{
+    if (strcmp(command, "RESET") == 0)
+    {
+        return fw_app_request_system_reset();
     }
 
     return false;
@@ -198,6 +229,34 @@ static bool hc_jsonl_append_set_arg_separator(char *buffer,
     return hc_jsonl_appendf(buffer, buffer_size, offset, ",");
 }
 
+static bool hc_jsonl_append_object_members(char *buffer,
+                                           size_t buffer_size,
+                                           size_t *offset,
+                                           const char *object_json)
+{
+    size_t object_len;
+
+    if ((buffer == NULL) || (offset == NULL) || (object_json == NULL))
+    {
+        return false;
+    }
+
+    object_len = strlen(object_json);
+    if ((object_len < 2U) ||
+        (object_json[0] != '{') ||
+        (object_json[object_len - 1U] != '}') ||
+        (*offset + object_len - 2U >= buffer_size))
+    {
+        return false;
+    }
+
+    memcpy(&buffer[*offset], &object_json[1], object_len - 2U);
+    *offset += object_len - 2U;
+    buffer[*offset] = '\0';
+
+    return true;
+}
+
 hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                     const jsmntok_t *tokens,
                                     const hc_cmd_request_t *request,
@@ -208,13 +267,12 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
     char args_json[HC_JSONL_SET_ARGS_JSON_MAX_LEN];
     char dbg_signals_json[HC_JSONL_DBG_SIGNALS_JSON_MAX_LEN];
     char digital_signals_json[HC_JSONL_DBG_SIGNALS_JSON_MAX_LEN];
-    char ltc3901_cfg_json[384];
-    char lt8316_cfg_json[160];
     hc_jsonl_set_sts_period_request_t sts_period_request;
     hc_jsonl_set_debug_request_t debug_request;
     hc_jsonl_set_adc_cal_request_t adc_cal_request;
     hc_jsonl_set_ltc3901_cmd_request_t ltc3901_cmd_request;
     hc_jsonl_set_lt8316_cmd_request_t lt8316_cmd_request;
+    hc_jsonl_set_hc_cmd_request_t hc_cmd_request;
     hc_jsonl_set_ltc3901_cfg_request_t ltc3901_cfg_request;
     hc_jsonl_set_lt8316_cfg_request_t lt8316_cfg_request;
     hc_jsonl_set_digital_signals_request_t digital_signals_request;
@@ -232,9 +290,11 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
     hc_cmd_status_t adc_cal_parse_status;
     hc_cmd_status_t ltc3901_cmd_parse_status;
     hc_cmd_status_t lt8316_cmd_parse_status;
+    hc_cmd_status_t hc_cmd_parse_status;
     hc_cmd_status_t ltc3901_cfg_parse_status;
     hc_cmd_status_t lt8316_cfg_parse_status;
     hc_cmd_status_t digital_signals_parse_status;
+    uint8_t set_field_count = 0U;
 
     if ((request == NULL) || (rsp_buf == NULL))
     {
@@ -247,6 +307,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
     adc_cal_parse_status = hc_jsonl_parse_set_adc_calibration(line, tokens, request, &adc_cal_request);
     ltc3901_cmd_parse_status = hc_jsonl_parse_set_ltc3901_cmd(line, tokens, request, &ltc3901_cmd_request);
     lt8316_cmd_parse_status = hc_jsonl_parse_set_lt8316_cmd(line, tokens, request, &lt8316_cmd_request);
+    hc_cmd_parse_status = hc_jsonl_parse_set_hc_cmd(line, tokens, request, &hc_cmd_request);
     ltc3901_cfg_parse_status = hc_jsonl_parse_set_ltc3901_cfg(line, tokens, request, &ltc3901_cfg_request);
     lt8316_cfg_parse_status = hc_jsonl_parse_set_lt8316_cfg(line, tokens, request, &lt8316_cfg_request);
     digital_signals_parse_status = hc_jsonl_parse_set_digital_signals(line, tokens, request, &digital_signals_request);
@@ -257,6 +318,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
         (adc_cal_parse_status == HC_CMD_ERR_BAD_ARGS) ||
         (ltc3901_cmd_parse_status == HC_CMD_ERR_BAD_ARGS) ||
         (lt8316_cmd_parse_status == HC_CMD_ERR_BAD_ARGS) ||
+        (hc_cmd_parse_status == HC_CMD_ERR_BAD_ARGS) ||
         (ltc3901_cfg_parse_status == HC_CMD_ERR_BAD_ARGS) ||
         (lt8316_cfg_parse_status == HC_CMD_ERR_BAD_ARGS) ||
         (digital_signals_parse_status == HC_CMD_ERR_BAD_ARGS))
@@ -332,7 +394,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                       request->msg,
                                       hc_datetime_get(),
                                       "BAD_VALUE",
-                                      "args.adc_cal must include channel, slope_scaled, offset, and valid; channel may be an index or ADC signal name"))
+                                      "ADC calibration SET requires one or more adc.<channel> calibration fields for one channel"))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -348,7 +410,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                       request->msg,
                                       hc_datetime_get(),
                                       "BAD_VALUE",
-                                      "args.adc_cal.channel is out of range"))
+                                      "ADC calibration channel is out of range"))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -387,6 +449,22 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
         return HC_CMD_ERR_BAD_VALUE;
     }
 
+    if (hc_cmd_parse_status == HC_CMD_ERR_BAD_VALUE)
+    {
+        if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                      rsp_buf_size,
+                                      HC_CMD_HOST_CONTROLLER_ID,
+                                      request->has_msg,
+                                      request->msg,
+                                      hc_datetime_get(),
+                                      "BAD_VALUE",
+                                      "args.hc_cmd must be RESET"))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
     if ((digital_signals_parse_status == HC_CMD_ERR_BAD_VALUE) && !debug_request.HasSignals)
     {
         if (!hc_jsonl_rsp_build_error(rsp_buf,
@@ -396,7 +474,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                       request->msg,
                                       hc_datetime_get(),
                                       "BAD_VALUE",
-                                      "args.dbg_signals must be an object with boolean values for settable digital signals"))
+                                      "settable digital signal args must use direct signal names with boolean values"))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -412,7 +490,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                       request->msg,
                                       hc_datetime_get(),
                                       "BAD_VALUE",
-                                      "args.ltc3901_cfg must be an object containing one or more valid numeric LTC3901 manager config fields"))
+                                      "LTC3901 config SET requires valid direct ltc3901.<field> numeric values"))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -428,7 +506,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                       request->msg,
                                       hc_datetime_get(),
                                       "BAD_VALUE",
-                                      "args.lt8316_cfg must be an object containing one or more valid numeric LT8316 manager config fields"))
+                                      "LT8316 config SET requires valid direct lt8316.<field> numeric values"))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -441,6 +519,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
         (adc_cal_parse_status != HC_CMD_OK) &&
         (ltc3901_cmd_parse_status != HC_CMD_OK) &&
         (lt8316_cmd_parse_status != HC_CMD_OK) &&
+        (hc_cmd_parse_status != HC_CMD_OK) &&
         (ltc3901_cfg_parse_status != HC_CMD_OK) &&
         (lt8316_cfg_parse_status != HC_CMD_OK) &&
         (digital_signals_parse_status != HC_CMD_OK))
@@ -452,11 +531,38 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                       request->msg,
                                       hc_datetime_get(),
                                       "BAD_FIELD",
-                                      "SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cmd, lt8316_cmd, ltc3901_cfg, or lt8316_cfg"))
+                                      "SET currently supports args.date_time, args.sts_period_ms, args.dbg_period_ms, args.dbg_signals, args.hc_cmd, direct adc.<channel> calibration fields, args.ltc3901_cmd, args.lt8316_cmd, direct ltc3901.<field> config fields, direct lt8316.<field> config fields, or direct settable digital signal fields"))
         {
             return HC_CMD_ERR_INTERNAL;
         }
         return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (date_time_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (sts_period_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (debug_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (adc_cal_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (ltc3901_cmd_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (lt8316_cmd_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (hc_cmd_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (ltc3901_cfg_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (lt8316_cfg_parse_status == HC_CMD_OK) { set_field_count++; }
+    if (digital_signals_parse_status == HC_CMD_OK) { set_field_count++; }
+
+    if ((hc_cmd_parse_status == HC_CMD_OK) && (set_field_count > 1U))
+    {
+        if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                      rsp_buf_size,
+                                      HC_CMD_HOST_CONTROLLER_ID,
+                                      request->has_msg,
+                                      request->msg,
+                                      hc_datetime_get(),
+                                      "BAD_STATE",
+                                      "hc_cmd RESET must be sent as a standalone SET command"))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        return HC_CMD_ERR_BAD_STATE;
     }
 
     args_json[0] = '\0';
@@ -633,32 +739,91 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
 
     if (adc_cal_parse_status == HC_CMD_OK)
     {
-        calibration.SlopeScaled = adc_cal_request.SlopeScaled;
-        calibration.Offset = adc_cal_request.Offset;
-        calibration.Valid = adc_cal_request.Valid;
+        const char *channel_name;
+        bool first_cal_arg = true;
+
+        if (!adc_sense_drv_get_calibration((adc_sense_channel_t)adc_cal_request.Channel, &calibration))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (adc_cal_request.HasSlopeScaled)
+        {
+            calibration.SlopeScaled = adc_cal_request.SlopeScaled;
+        }
+        if (adc_cal_request.HasOffset)
+        {
+            calibration.Offset = adc_cal_request.Offset;
+        }
+        if (adc_cal_request.HasValid)
+        {
+            calibration.Valid = adc_cal_request.Valid;
+        }
 
         if (!adc_sense_drv_set_calibration((adc_sense_channel_t)adc_cal_request.Channel, &calibration))
         {
             return HC_CMD_ERR_INTERNAL;
         }
 
-        if (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg) ||
-            !hc_jsonl_appendf(args_json,
-                              sizeof(args_json),
-                              &args_offset,
-                              "\"adc_cal\":{\"channel\":%lu,\"slope_scaled\":%ld,\"offset\":%ld,\"valid\":%s}",
-                              (unsigned long)adc_cal_request.Channel,
-                              (long)calibration.SlopeScaled,
-                              (long)calibration.Offset,
-                              calibration.Valid ? "true" : "false"))
+        channel_name = hc_jsonl_get_adc_channel_name(adc_cal_request.Channel);
+        if (channel_name == NULL)
         {
             return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (adc_cal_request.HasSlopeScaled)
+        {
+            if (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_cal_arg) ||
+                !hc_jsonl_appendf(args_json,
+                                  sizeof(args_json),
+                                  &args_offset,
+                                  "\"adc.%s.slope_scaled\":%ld",
+                                  channel_name,
+                                  (long)calibration.SlopeScaled))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+        }
+
+        if (adc_cal_request.HasOffset)
+        {
+            if (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_cal_arg) ||
+                !hc_jsonl_appendf(args_json,
+                                  sizeof(args_json),
+                                  &args_offset,
+                                  "\"adc.%s.offset\":%ld",
+                                  channel_name,
+                                  (long)calibration.Offset))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+        }
+
+        if (adc_cal_request.HasValid)
+        {
+            if (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_cal_arg) ||
+                !hc_jsonl_appendf(args_json,
+                                  sizeof(args_json),
+                                  &args_offset,
+                                  "\"adc.%s.valid\":%s",
+                                  channel_name,
+                                  calibration.Valid ? "true" : "false"))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
         }
         any_set_field = true;
     }
 
     if (ltc3901_cfg_parse_status == HC_CMD_OK)
     {
+        bool first_config_arg = true;
+
         if (!fw_app_get_ltc3901_config(&ltc3901_config))
         {
             return HC_CMD_ERR_INTERNAL;
@@ -710,9 +875,74 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
         }
 
         if (!fw_app_set_ltc3901_config(&ltc3901_config) ||
-            !hc_jsonl_build_ltc3901_cfg_json(&ltc3901_config, ltc3901_cfg_json, sizeof(ltc3901_cfg_json)) ||
-            !hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg) ||
-            !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901_cfg\":%s", ltc3901_cfg_json))
+            !hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (ltc3901_cfg_request.HasIsupplyMaMax &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.isupply_ma_max\":%ld", (long)ltc3901_config.isupply_ma_max)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasVupstreamMvMin &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.vupstream_mv_min\":%ld", (long)ltc3901_config.vupstream_mv_min)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasLtc3901VccMvMin &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.ltc3901_vcc_mv_min\":%ld", (long)ltc3901_config.ltc3901_vcc_mv_min)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasPowerUpTimeoutMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.power_up_timeout_ms\":%lu", (unsigned long)ltc3901_config.power_up_timeout_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasPowerRetryDelayMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.power_retry_delay_ms\":%lu", (unsigned long)ltc3901_config.power_retry_delay_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasPowerFaultMax &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.power_fault_max\":%lu", (unsigned long)ltc3901_config.power_fault_max)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasSyncOnDelayMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.sync_on_delay_ms\":%lu", (unsigned long)ltc3901_config.sync_on_delay_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasSyncHoldOnTimeMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.sync_hold_on_time_ms\":%lu", (unsigned long)ltc3901_config.sync_hold_on_time_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasSyncHoldOffTimeMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.sync_hold_off_time_ms\":%lu", (unsigned long)ltc3901_config.sync_hold_off_time_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasSyncStabilizationTimeMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.sync_stabilization_time_ms\":%lu", (unsigned long)ltc3901_config.sync_stabilization_time_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (ltc3901_cfg_request.HasSyncFaultDelayMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"ltc3901.sync_fault_delay_ms\":%lu", (unsigned long)ltc3901_config.sync_fault_delay_ms)))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -721,6 +951,8 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
 
     if (lt8316_cfg_parse_status == HC_CMD_OK)
     {
+        bool first_config_arg = true;
+
         if (!fw_app_get_lt8316_config(&lt8316_config))
         {
             return HC_CMD_ERR_INTERNAL;
@@ -741,9 +973,26 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
         }
 
         if (!fw_app_set_lt8316_config(&lt8316_config) ||
-            !hc_jsonl_build_lt8316_cfg_json(&lt8316_config, lt8316_cfg_json, sizeof(lt8316_cfg_json)) ||
-            !hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg) ||
-            !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"lt8316_cfg\":%s", lt8316_cfg_json))
+            !hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (lt8316_cfg_request.HasPowerRetryDelayMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"lt8316.power_retry_delay_ms\":%lu", (unsigned long)lt8316_config.power_retry_delay_ms)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (lt8316_cfg_request.HasPowerFaultMax &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"lt8316.power_fault_max\":%lu", (unsigned long)lt8316_config.power_fault_max)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        if (lt8316_cfg_request.HasPowerOnStabilizationTimeMs &&
+            (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_config_arg) ||
+             !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"lt8316.power_on_stabilization_time_ms\":%lu", (unsigned long)lt8316_config.power_on_stabilization_time_ms)))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -782,6 +1031,25 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                               &args_offset,
                               "\"lt8316_cmd\":\"%s\"",
                               lt8316_cmd_request.Command))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        any_set_field = true;
+    }
+
+    if (hc_cmd_parse_status == HC_CMD_OK)
+    {
+        if (!hc_jsonl_apply_hc_cmd(hc_cmd_request.Command))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (!hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg) ||
+            !hc_jsonl_appendf(args_json,
+                              sizeof(args_json),
+                              &args_offset,
+                              "\"hc_cmd\":\"%s\"",
+                              hc_cmd_request.Command))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -834,7 +1102,7 @@ hc_cmd_status_t hc_jsonl_handle_set(const char *line,
                                                       digital_signals_json,
                                                       sizeof(digital_signals_json)) ||
             !hc_jsonl_append_set_arg_separator(args_json, sizeof(args_json), &args_offset, &first_arg) ||
-            !hc_jsonl_appendf(args_json, sizeof(args_json), &args_offset, "\"dbg_signals\":%s", digital_signals_json))
+            !hc_jsonl_append_object_members(args_json, sizeof(args_json), &args_offset, digital_signals_json))
         {
             return HC_CMD_ERR_INTERNAL;
         }
@@ -863,22 +1131,27 @@ hc_cmd_status_t hc_jsonl_handle_get(const char *line,
                                     size_t rsp_buf_size)
 {
     const char *current_date_time;
-    hc_jsonl_get_raw_adc_request_t raw_adc_request;
     hc_jsonl_get_debug_request_t debug_request;
     hc_jsonl_get_adc_cal_request_t adc_cal_request;
     hc_jsonl_get_ltc3901_cfg_request_t ltc3901_cfg_request;
     hc_jsonl_get_lt8316_cfg_request_t lt8316_cfg_request;
     hc_cmd_status_t sw_version_parse_status;
+    hc_cmd_status_t ltc3901_cfg_parse_status;
+    hc_cmd_status_t lt8316_cfg_parse_status;
+    hc_cmd_status_t adc_cal_parse_status;
+    hc_cmd_status_t debug_parse_status;
+    hc_cmd_status_t date_time_parse_status;
     hc_debug_telemetry_config_t debug_config;
     char dbg_signals_json[HC_JSONL_DBG_SIGNALS_JSON_MAX_LEN];
-    char get_args_json[HC_JSONL_DBG_SIGNALS_JSON_MAX_LEN];
+    char get_args_json[HC_JSONL_SET_ARGS_JSON_MAX_LEN];
     char ltc3901_cfg_json[384];
     char lt8316_cfg_json[160];
     adc_sense_calibration_t calibration;
     ltc3901_manager_config_t ltc3901_config;
     lt8316_manager_config_t lt8316_config;
-    uint16_t raw_adc_value;
-    int written;
+    size_t args_offset = 0U;
+    bool first_arg = true;
+    bool any_get_field = false;
 
     if ((request == NULL) || (rsp_buf == NULL))
     {
@@ -886,38 +1159,145 @@ hc_cmd_status_t hc_jsonl_handle_get(const char *line,
     }
 
     sw_version_parse_status = hc_jsonl_parse_get_sw_version(line, tokens, request);
-    switch (sw_version_parse_status)
+    ltc3901_cfg_parse_status = hc_jsonl_parse_get_ltc3901_cfg(line, tokens, request, &ltc3901_cfg_request);
+    lt8316_cfg_parse_status = hc_jsonl_parse_get_lt8316_cfg(line, tokens, request, &lt8316_cfg_request);
+    adc_cal_parse_status = hc_jsonl_parse_get_adc_calibration(line, tokens, request, &adc_cal_request);
+    debug_parse_status = hc_jsonl_parse_get_debug_config(line, tokens, request, &debug_request);
+    date_time_parse_status = hc_jsonl_parse_get_date_time(line, tokens, request);
+
+    if ((sw_version_parse_status == HC_CMD_ERR_BAD_ARGS) ||
+        (ltc3901_cfg_parse_status == HC_CMD_ERR_BAD_ARGS) ||
+        (lt8316_cfg_parse_status == HC_CMD_ERR_BAD_ARGS) ||
+        (adc_cal_parse_status == HC_CMD_ERR_BAD_ARGS) ||
+        (debug_parse_status == HC_CMD_ERR_BAD_ARGS) ||
+        (date_time_parse_status == HC_CMD_ERR_BAD_ARGS))
     {
-        case HC_CMD_OK:
-            if (!hc_jsonl_rsp_build_get_sw_version_ok(rsp_buf,
-                                                      rsp_buf_size,
-                                                      HC_CMD_HOST_CONTROLLER_ID,
-                                                      request->msg,
-                                                      hc_datetime_get(),
-                                                      fw_app_get_sw_version()))
+        if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                      rsp_buf_size,
+                                      HC_CMD_HOST_CONTROLLER_ID,
+                                      request->has_msg,
+                                      request->msg,
+                                      hc_datetime_get(),
+                                      "BAD_ARGS",
+                                      "GET requires args to be an array of field names"))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        return HC_CMD_ERR_BAD_ARGS;
+    }
+
+    if ((sw_version_parse_status == HC_CMD_ERR_BAD_VALUE) ||
+        (ltc3901_cfg_parse_status == HC_CMD_ERR_BAD_VALUE) ||
+        (lt8316_cfg_parse_status == HC_CMD_ERR_BAD_VALUE) ||
+        (adc_cal_parse_status == HC_CMD_ERR_BAD_VALUE) ||
+        (debug_parse_status == HC_CMD_ERR_BAD_VALUE) ||
+        (date_time_parse_status == HC_CMD_ERR_BAD_VALUE))
+    {
+        if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                      rsp_buf_size,
+                                      HC_CMD_HOST_CONTROLLER_ID,
+                                      request->has_msg,
+                                      request->msg,
+                                      hc_datetime_get(),
+                                      "BAD_VALUE",
+                                      "GET args contains an invalid selector value"))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        return HC_CMD_ERR_BAD_VALUE;
+    }
+
+    if ((sw_version_parse_status != HC_CMD_OK) &&
+        (ltc3901_cfg_parse_status != HC_CMD_OK) &&
+        (lt8316_cfg_parse_status != HC_CMD_OK) &&
+        (adc_cal_parse_status != HC_CMD_OK) &&
+        (debug_parse_status != HC_CMD_OK) &&
+        (date_time_parse_status != HC_CMD_OK))
+    {
+        if (!hc_jsonl_rsp_build_error(rsp_buf,
+                                      rsp_buf_size,
+                                      HC_CMD_HOST_CONTROLLER_ID,
+                                      request->has_msg,
+                                      request->msg,
+                                      hc_datetime_get(),
+                                      "BAD_FIELD",
+                                      "GET currently supports date_time, sw_version, dbg_period_ms, dbg_signals, direct debug signal names, direct adc.<channel> calibration fields, ltc3901, or lt8316"))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        return HC_CMD_ERR_BAD_FIELD;
+    }
+
+    if (!hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "{"))
+    {
+        return HC_CMD_ERR_INTERNAL;
+    }
+
+    if (date_time_parse_status == HC_CMD_OK)
+    {
+        current_date_time = hc_datetime_get();
+        if (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+            !hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "\"date_time\":\"%s\"", current_date_time))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        any_get_field = true;
+    }
+
+    if (sw_version_parse_status == HC_CMD_OK)
+    {
+        if (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+            !hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "\"sw_version\":\"%s\"", fw_app_get_sw_version()))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+        any_get_field = true;
+    }
+
+    if (debug_parse_status == HC_CMD_OK)
+    {
+        if (debug_request.RequestSample)
+        {
+            if (!fw_app_debug_format_signals_json(debug_request.SignalIds,
+                                                  debug_request.SignalCount,
+                                                  dbg_signals_json,
+                                                  sizeof(dbg_signals_json)))
             {
                 return HC_CMD_ERR_INTERNAL;
             }
-            return HC_CMD_OK;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
+            if (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+                !hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "\"dbg_signals\":%s", dbg_signals_json))
             {
                 return HC_CMD_ERR_INTERNAL;
             }
-            return HC_CMD_ERR_BAD_ARGS;
+        }
+        else if (debug_request.RequestConfig)
+        {
+            if (!fw_app_get_debug_config(&debug_config) ||
+                !hc_jsonl_build_dbg_signals_json(&debug_config, dbg_signals_json, sizeof(dbg_signals_json)))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+            if (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+                !hc_jsonl_appendf(get_args_json,
+                                  sizeof(get_args_json),
+                                  &args_offset,
+                                  "\"dbg_period_ms\":%lu,\"dbg_signals\":%s",
+                                  (unsigned long)debug_config.PeriodMs,
+                                  dbg_signals_json))
+            {
+                return HC_CMD_ERR_INTERNAL;
+            }
+        }
+        any_get_field = true;
+    }
 
-        case HC_CMD_ERR_BAD_FIELD:
-            break;
+    if (adc_cal_parse_status == HC_CMD_OK)
+    {
+        const char *channel_name;
 
-        case HC_CMD_ERR_BAD_VALUE:
+        if (!adc_cal_request.Requested || !hc_jsonl_validate_adc_channel(adc_cal_request.Channel))
+        {
             if (!hc_jsonl_rsp_build_error(rsp_buf,
                                           rsp_buf_size,
                                           HC_CMD_HOST_CONTROLLER_ID,
@@ -925,491 +1305,93 @@ hc_cmd_status_t hc_jsonl_handle_get(const char *line,
                                           request->msg,
                                           hc_datetime_get(),
                                           "BAD_VALUE",
-                                          "GET args.sw_version must be true"))
+                                          "ADC calibration channel is out of range"))
             {
                 return HC_CMD_ERR_INTERNAL;
             }
             return HC_CMD_ERR_BAD_VALUE;
+        }
 
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
+        channel_name = hc_jsonl_get_adc_channel_name(adc_cal_request.Channel);
+        if ((channel_name == NULL) ||
+            !adc_sense_drv_get_calibration((adc_sense_channel_t)adc_cal_request.Channel, &calibration))
+        {
             return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (adc_cal_request.HasSlopeScaled &&
+            (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+             !hc_jsonl_appendf(get_args_json,
+                               sizeof(get_args_json),
+                               &args_offset,
+                               "\"adc.%s.slope_scaled\":%ld",
+                               channel_name,
+                               (long)calibration.SlopeScaled)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (adc_cal_request.HasOffset &&
+            (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+             !hc_jsonl_appendf(get_args_json,
+                               sizeof(get_args_json),
+                               &args_offset,
+                               "\"adc.%s.offset\":%ld",
+                               channel_name,
+                               (long)calibration.Offset)))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        if (adc_cal_request.HasValid &&
+            (!hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+             !hc_jsonl_appendf(get_args_json,
+                               sizeof(get_args_json),
+                               &args_offset,
+                               "\"adc.%s.valid\":%s",
+                               channel_name,
+                               calibration.Valid ? "true" : "false")))
+        {
+            return HC_CMD_ERR_INTERNAL;
+        }
+
+        any_get_field = true;
     }
 
-    switch (hc_jsonl_parse_get_ltc3901_cfg(line, tokens, request, &ltc3901_cfg_request))
+    if (ltc3901_cfg_parse_status == HC_CMD_OK)
     {
-        case HC_CMD_OK:
-            if (!ltc3901_cfg_request.Requested ||
-                !fw_app_get_ltc3901_config(&ltc3901_config) ||
-                !hc_jsonl_build_ltc3901_cfg_json(&ltc3901_config, ltc3901_cfg_json, sizeof(ltc3901_cfg_json)))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-
-            written = snprintf(get_args_json, sizeof(get_args_json), "{\"ltc3901_cfg\":%s}", ltc3901_cfg_json);
-            if ((written < 0) ||
-                ((size_t)written >= sizeof(get_args_json)) ||
-                !hc_jsonl_rsp_build_set_args_ok(rsp_buf,
-                                                rsp_buf_size,
-                                                HC_CMD_HOST_CONTROLLER_ID,
-                                                request->msg,
-                                                hc_datetime_get(),
-                                                get_args_json))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_OK;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_ARGS;
-
-        case HC_CMD_ERR_BAD_FIELD:
-            break;
-
-        case HC_CMD_ERR_BAD_VALUE:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_VALUE",
-                                          "GET args.ltc3901_cfg must be true"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_VALUE;
-
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
+        if (!ltc3901_cfg_request.Requested ||
+            !fw_app_get_ltc3901_config(&ltc3901_config) ||
+            !hc_jsonl_build_ltc3901_cfg_json(&ltc3901_config, ltc3901_cfg_json, sizeof(ltc3901_cfg_json)) ||
+            !hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+            !hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "\"ltc3901\":%s", ltc3901_cfg_json))
+        {
             return HC_CMD_ERR_INTERNAL;
+        }
+        any_get_field = true;
     }
 
-    switch (hc_jsonl_parse_get_lt8316_cfg(line, tokens, request, &lt8316_cfg_request))
+    if (lt8316_cfg_parse_status == HC_CMD_OK)
     {
-        case HC_CMD_OK:
-            if (!lt8316_cfg_request.Requested ||
-                !fw_app_get_lt8316_config(&lt8316_config) ||
-                !hc_jsonl_build_lt8316_cfg_json(&lt8316_config, lt8316_cfg_json, sizeof(lt8316_cfg_json)))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-
-            written = snprintf(get_args_json, sizeof(get_args_json), "{\"lt8316_cfg\":%s}", lt8316_cfg_json);
-            if ((written < 0) ||
-                ((size_t)written >= sizeof(get_args_json)) ||
-                !hc_jsonl_rsp_build_set_args_ok(rsp_buf,
-                                                rsp_buf_size,
-                                                HC_CMD_HOST_CONTROLLER_ID,
-                                                request->msg,
-                                                hc_datetime_get(),
-                                                get_args_json))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_OK;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_ARGS;
-
-        case HC_CMD_ERR_BAD_FIELD:
-            break;
-
-        case HC_CMD_ERR_BAD_VALUE:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_VALUE",
-                                          "GET args.lt8316_cfg must be true"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_VALUE;
-
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
+        if (!lt8316_cfg_request.Requested ||
+            !fw_app_get_lt8316_config(&lt8316_config) ||
+            !hc_jsonl_build_lt8316_cfg_json(&lt8316_config, lt8316_cfg_json, sizeof(lt8316_cfg_json)) ||
+            !hc_jsonl_append_set_arg_separator(get_args_json, sizeof(get_args_json), &args_offset, &first_arg) ||
+            !hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "\"lt8316\":%s", lt8316_cfg_json))
+        {
             return HC_CMD_ERR_INTERNAL;
+        }
+        any_get_field = true;
     }
 
-    switch (hc_jsonl_parse_get_raw_adc(line, tokens, request, &raw_adc_request))
-    {
-        case HC_CMD_OK:
-            if (!raw_adc_request.Requested)
-            {
-                break;
-            }
-
-            if (raw_adc_request.HasChannel)
-            {
-                if (raw_adc_request.Channel >= (uint32_t)ADC_SENSE_CHANNEL_COUNT)
-                {
-                    if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                                  rsp_buf_size,
-                                                  HC_CMD_HOST_CONTROLLER_ID,
-                                                  request->has_msg,
-                                                  request->msg,
-                                                  hc_datetime_get(),
-                                                  "BAD_VALUE",
-                                                  "args.raw_adc channel is out of range"))
-                    {
-                        return HC_CMD_ERR_INTERNAL;
-                    }
-                    return HC_CMD_ERR_BAD_VALUE;
-                }
-
-                raw_adc_value = adc_sense_drv_get_raw((adc_sense_channel_t)raw_adc_request.Channel);
-            }
-            else
-            {
-                raw_adc_value = adc_sense_drv_get_raw(ADC_SENSE_CHANNEL_VUPSTREAM);
-            }
-
-            current_date_time = hc_datetime_get();
-            if (!hc_jsonl_rsp_build_get_raw_adc_ok(rsp_buf,
-                                                   rsp_buf_size,
-                                                   HC_CMD_HOST_CONTROLLER_ID,
-                                                   request->msg,
-                                                   current_date_time,
-                                                   raw_adc_request.HasChannel,
-                                                   raw_adc_request.Channel,
-                                                   raw_adc_value))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_OK;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_ARGS;
-
-        case HC_CMD_ERR_BAD_FIELD:
-            break;
-
-        case HC_CMD_ERR_BAD_VALUE:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_VALUE",
-                                          "GET args.raw_adc must be true or a valid channel index"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_VALUE;
-
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_INTERNAL;
-    }
-
-    switch (hc_jsonl_parse_get_adc_calibration(line, tokens, request, &adc_cal_request))
-    {
-        case HC_CMD_OK:
-            if (!adc_cal_request.Requested || !hc_jsonl_validate_adc_channel(adc_cal_request.Channel))
-            {
-                if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                              rsp_buf_size,
-                                              HC_CMD_HOST_CONTROLLER_ID,
-                                              request->has_msg,
-                                              request->msg,
-                                              hc_datetime_get(),
-                                              "BAD_VALUE",
-                                              "args.adc_cal channel is out of range"))
-                {
-                    return HC_CMD_ERR_INTERNAL;
-                }
-                return HC_CMD_ERR_BAD_VALUE;
-            }
-
-            if (!adc_sense_drv_get_calibration((adc_sense_channel_t)adc_cal_request.Channel, &calibration) ||
-                !hc_jsonl_rsp_build_get_adc_cal_ok(rsp_buf,
-                                                   rsp_buf_size,
-                                                   HC_CMD_HOST_CONTROLLER_ID,
-                                                   request->msg,
-                                                   hc_datetime_get(),
-                                                   adc_cal_request.Channel,
-                                                   calibration.SlopeScaled,
-                                                   calibration.Offset,
-                                                   calibration.Valid))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_OK;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_ARGS;
-
-        case HC_CMD_ERR_BAD_FIELD:
-            break;
-
-        case HC_CMD_ERR_BAD_VALUE:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_VALUE",
-                                          "GET args.adc_cal must be a valid channel index or ADC signal name"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_VALUE;
-
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_INTERNAL;
-    }
-
-    switch (hc_jsonl_parse_get_debug_config(line, tokens, request, &debug_request))
-    {
-        case HC_CMD_OK:
-            if (debug_request.RequestSample)
-            {
-                if (!fw_app_debug_format_signals_json(debug_request.SignalIds,
-                                                      debug_request.SignalCount,
-                                                      dbg_signals_json,
-                                                      sizeof(dbg_signals_json)) ||
-                    !hc_jsonl_rsp_build_get_debug_signals_ok(rsp_buf,
-                                                             rsp_buf_size,
-                                                             HC_CMD_HOST_CONTROLLER_ID,
-                                                             request->msg,
-                                                             hc_datetime_get(),
-                                                             dbg_signals_json))
-                {
-                    return HC_CMD_ERR_INTERNAL;
-                }
-                return HC_CMD_OK;
-            }
-
-            if (debug_request.RequestConfig &&
-                fw_app_get_debug_config(&debug_config) &&
-                hc_jsonl_build_dbg_signals_json(&debug_config, dbg_signals_json, sizeof(dbg_signals_json)) &&
-                hc_jsonl_rsp_build_get_debug_config_ok(rsp_buf,
-                                                       rsp_buf_size,
-                                                       HC_CMD_HOST_CONTROLLER_ID,
-                                                       request->msg,
-                                                       hc_datetime_get(),
-                                                       debug_config.PeriodMs,
-                                                       dbg_signals_json))
-            {
-                return HC_CMD_OK;
-            }
-            return HC_CMD_ERR_INTERNAL;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_ARGS;
-
-        case HC_CMD_ERR_BAD_FIELD:
-            break;
-
-        case HC_CMD_ERR_BAD_VALUE:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_VALUE",
-                                          "GET args.dbg_period_ms must be true, and args.dbg_signals must be true or a valid signal array"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_VALUE;
-
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_INTERNAL;
-    }
-
-    switch (hc_jsonl_parse_get_date_time(line, tokens, request))
-    {
-        case HC_CMD_OK:
-            break;
-
-        case HC_CMD_ERR_BAD_ARGS:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_ARGS",
-                                          "GET requires an args object"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_ARGS;
-
-        case HC_CMD_ERR_BAD_FIELD:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_FIELD",
-                                          "GET currently supports args.date_time, args.sw_version, args.raw_adc, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cfg, or lt8316_cfg"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_FIELD;
-
-        case HC_CMD_ERR_BAD_VALUE:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "BAD_VALUE",
-                                          "GET args.date_time must be true"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_BAD_VALUE;
-
-        default:
-            if (!hc_jsonl_rsp_build_error(rsp_buf,
-                                          rsp_buf_size,
-                                          HC_CMD_HOST_CONTROLLER_ID,
-                                          request->has_msg,
-                                          request->msg,
-                                          hc_datetime_get(),
-                                          "INTERNAL",
-                                          "GET parsing failed"))
-            {
-                return HC_CMD_ERR_INTERNAL;
-            }
-            return HC_CMD_ERR_INTERNAL;
-    }
-
-    current_date_time = hc_datetime_get();
-    if (!hc_jsonl_rsp_build_get_datetime_ok(rsp_buf,
-                                            rsp_buf_size,
-                                            HC_CMD_HOST_CONTROLLER_ID,
-                                            request->msg,
-                                            current_date_time,
-                                            current_date_time))
+    if (!any_get_field ||
+        !hc_jsonl_appendf(get_args_json, sizeof(get_args_json), &args_offset, "}") ||
+        !hc_jsonl_rsp_build_set_args_ok(rsp_buf,
+                                        rsp_buf_size,
+                                        HC_CMD_HOST_CONTROLLER_ID,
+                                        request->msg,
+                                        hc_datetime_get(),
+                                        get_args_json))
     {
         return HC_CMD_ERR_INTERNAL;
     }

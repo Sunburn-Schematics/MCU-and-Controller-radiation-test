@@ -16,12 +16,6 @@ static bool s_ltc3901_manager_sync_enabled;
 static bool s_lt8316_manager_state_valid;
 static const char *s_lt8316_manager_state_name;
 
-static const char *const s_hc_app_state_strings[] = {
-#define X(name, str) str,
-    HC_APP_STATE_TABLE(X)
-#undef X
-};
-
 static void hc_app_format_json_int_or_null(char *buffer, size_t buffer_size, int32_t value)
 {
     if ((buffer == 0) || (buffer_size == 0U))
@@ -73,7 +67,6 @@ static int32_t hc_app_get_adc_engineering_or_pin_mv(adc_sense_channel_t channel)
 void hc_app_status_init(void)
 {
     s_hc_app_status.HcId = 1U;
-    s_hc_app_status.State = HC_APP_STATE_NORMAL;
     s_hc_app_status.BeamOn = false;
 
     s_hc_app_status.Ltc3901.ManagerState = "RESET";
@@ -261,10 +254,9 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
     written = snprintf(
         buffer,
         buffer_len,
-        "{\"type\":\"STS\",\"hc_id\":%u,\"ts\":\"%s\",\"state\":\"%s\",\"beam_on\":%s,\"duts\":{\"LTC3901\":{\"state\":\"%s\",\"pwr_en\":%s,\"sync\":%s,\"vsupply\":%s,\"vshunt\":%s,\"isupply\":%s,\"me_freq\":%s,\"me_ratio\":%s,\"me_anlg\":%s,\"mf_freq\":%s,\"mf_ratio\":%s,\"mf_anlg\":%s},\"LT8316\":{\"state\":\"%s\",\"pwr_en\":%s,\"gate_freq\":%s,\"gate_anlg\":%s,\"vout\":%s}}}",
+        "{\"type\":\"STS\",\"hc_id\":%u,\"ts\":\"%s\",\"beam_on\":%s,\"duts\":{\"LTC3901\":{\"state\":\"%s\",\"pwr_en\":%s,\"sync\":%s,\"vsupply\":%s,\"vshunt\":%s,\"isupply\":%s,\"me_freq\":%s,\"me_ratio\":%s,\"me_anlg\":%s,\"mf_freq\":%s,\"mf_ratio\":%s,\"mf_anlg\":%s},\"LT8316\":{\"state\":\"%s\",\"pwr_en\":%s,\"gate_freq\":%s,\"gate_anlg\":%s,\"vout\":%s}}}",
         (unsigned int)status->HcId,
         ts,
-        hc_app_state_to_string(status->State),
         status->BeamOn ? "true" : "false",
         status->Ltc3901.ManagerState,
         status->Ltc3901.PowerEnabled ? "true" : "false",
@@ -285,14 +277,4 @@ bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len)
         lt8316_vout);
 
     return (written >= 0) && ((size_t)written < buffer_len);
-}
-
-const char *hc_app_state_to_string(hc_app_state_t state)
-{
-    if (((unsigned int)state) >= (sizeof(s_hc_app_state_strings) / sizeof(s_hc_app_state_strings[0])))
-    {
-        return "FAULT";
-    }
-
-    return s_hc_app_state_strings[state];
 }

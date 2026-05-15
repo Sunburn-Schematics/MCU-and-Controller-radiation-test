@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "DUT_Manager_State_Charts.md",
+                "file": "Command_Syntax.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "DUT_Manager_State_Charts"
+              "title": "Command_Syntax"
             }
           }
         ]
@@ -185,9 +185,25 @@
   },
   "active": "79f6f1e3e6facd0e",
   "lastOpenFiles": [
-    "JSON_Tests.md",
+    "Command_Reference.md",
+    "requirements/host_controller/hc_implementation_alignment_20260515.md",
+    "Index.md",
     "DUT_Manager_State_Charts.md",
     "Debug_Signals.md",
+    "Command_Syntax.md",
+    "tc_hc_jsonl_command_structure_preliminary.md",
+    "requirements/host_controller/hc_state_machine_spec.md",
+    "requirements/host_controller/hc_verification_traceability_matrix.md",
+    "requirements/host_controller/hc_protocol_test_plan.md",
+    "requirements/host_controller/hc_reset_reason_and_rtc_startup_policy.md",
+    "requirements/host_controller/hc_architecture.md",
+    "requirements/host_controller/hc_variable_registry.md",
+    "requirements/host_controller/hc_te_interface_spec.md",
+    "requirements/host_controller/hc_prd.md",
+    "requirements/host_controller/hc_fault_response_matrix.md",
+    "requirements/Index.md",
+    "requirements/host_controller/Index.md",
+    "JSON_Tests.md",
     "architecture.md",
     "requirements/host_controller/hc_dut_monitor_functions_spec_v1.md",
     "requirements/host_controller/hc_jsonl_command_processor_implementation_plan_v1.md",
@@ -203,9 +219,7 @@
     "requirements/BF044920",
     "requirements/LTC3901_Monitor_STT.xlsx",
     "requirements/~$LTC3901_Monitor_STT.xlsx",
-    "Index.md",
     "pin_connections.md",
-    "requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md",
-    "tc_hc_jsonl_command_structure_preliminary_v1.md"
+    "requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md"
   ]
 }

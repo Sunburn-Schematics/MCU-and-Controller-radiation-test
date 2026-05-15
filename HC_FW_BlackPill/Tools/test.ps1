@@ -946,6 +946,16 @@ try {
             $port = Open-TestSerialPort -Name $PortName -Speed $BaudRate
         }
 
+        if (($case.PSObject.Properties.Name -contains "reset_after") -and [bool]$case.reset_after) {
+            Write-Output "RECOVER reset_after $($case.id)"
+            Close-TestSerialPort -Port $port
+            $port = $null
+            Start-Sleep -Milliseconds 1500
+            $serialDevice = Get-UsbCdcPort -RequestedPortName $PortName
+            $PortName = $serialDevice.PortName
+            $port = Open-TestSerialPort -Name $PortName -Speed $BaudRate
+        }
+
         if ((-not $result.pass) -and (-not $ContinueOnFail)) {
             break
         }

@@ -41,6 +41,11 @@ void hc_jsonl_cmd_process_line(const char *line)
             error_code = "BAD_ARGS";
             error_message = "Missing or invalid msg field";
         }
+        else if (status == HC_CMD_ERR_BAD_STATE)
+        {
+            error_code = "BAD_STATE";
+            error_message = "Request is not allowed in the current state";
+        }
 
         if (hc_jsonl_rsp_build_error(rsp_buf,
                                      sizeof(rsp_buf),

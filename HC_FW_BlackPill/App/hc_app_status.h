@@ -9,19 +9,6 @@
 extern "C" {
 #endif
 
-#define HC_APP_STATE_TABLE(X) \
-    X(HC_APP_STATE_BOOT,   "BOOT") \
-    X(HC_APP_STATE_FAULT,  "FAULT") \
-    X(HC_APP_STATE_NORMAL, "NORMAL") \
-    X(HC_APP_STATE_SLAVE,  "SLAVE")
-
-typedef enum
-{
-#define X(name, str) name,
-    HC_APP_STATE_TABLE(X)
-#undef X
-} hc_app_state_t;
-
 typedef struct
 {
     const char *ManagerState;
@@ -50,7 +37,6 @@ typedef struct
 typedef struct
 {
     uint32_t HcId;
-    hc_app_state_t State;
     bool BeamOn;
     hc_app_ltc3901_status_t Ltc3901;
     hc_app_lt8316_status_t Lt8316;
@@ -64,8 +50,6 @@ void hc_app_status_set_lt8316_manager_state(const char *manager_state);
 hc_app_status_t *hc_app_status_get(void);
 const hc_app_status_t *hc_app_status_get_const(void);
 bool hc_app_status_format_sts_json(char *buffer, size_t buffer_len);
-
-const char *hc_app_state_to_string(hc_app_state_t state);
 
 #ifdef __cplusplus
 }

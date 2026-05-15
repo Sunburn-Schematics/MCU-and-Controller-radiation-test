@@ -5,7 +5,7 @@ Goal: reliably program the STM32F411 BlackPill target and verify that the flashe
 Current hardware path:
 - Programmer/debug probe: ST-Link over SWD
 - Runtime verification transport: USB CDC / VCP
-- Runtime protocol: newline-delimited JSONL command/response
+- Runtime protocol: JSON command/response over USB CDC/VCP
 
 Complete programming verification loop:
 1. Use the guarded build process in `Tools/build_notes.md` to produce `build\Debug\HC_FW_BlackPill.elf`.
@@ -25,8 +25,8 @@ Project clues used:
 - `.vscode/launch.json` uses an ST-Link GDB target.
 - `HC_FW_BlackPill_F411CCU6.ioc` assigns PA13/PA14 to SWD and enables USB Device CDC FS.
 - `Docs/architecture.md` and requirements docs define USB VCP as the primary TE interface.
-- `Services/CommandHandler/README.md` documents `GET args.sw_version:true`.
-- `Logging/launch.ps1` shows the expected JSONL command style and response parsing.
+- `Services/CommandHandler/README.md` documents `GET args ["sw_version"]`.
+- `Logging/launch.ps1` shows the expected JSON command style and response parsing.
 
 Codex programming procedure:
 1. Build or confirm the ELF exists:
@@ -73,7 +73,7 @@ Runtime verification details:
   - product string containing `SBS RadTest CDC`
   - product string containing `STM32`
 - The verification command is:
-  - `{"type":"GET","msg":101,"args":{"sw_version":true}}`
+  - `{"type":"GET","msg":101,"args":["sw_version"]}`
 - The current verified response after programming was:
   - `{"type":"RSP","hc":4,"msg":101,"ts":"20000502 05:24:22","args":{"sw_version":"0.1.1"}}`
 

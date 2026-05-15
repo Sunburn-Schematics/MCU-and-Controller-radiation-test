@@ -116,8 +116,7 @@ Known issue:
 
 Warnings from the first successful guarded build:
 - `Services/CommandHandler/hc_datetime.c`: `snprintf` date/time buffer truncation warning in `hc_datetime_ensure_initialized`.
-- `Services/jsmn/jsmn_print_utils.c`: `isspace()` called with a `char` subscript expression in `jsmn_flatprint`.
 
 Next diagnostics:
 - Investigate why the direct Ninja scheduler path hangs when invoked from automation.
-- Fix the two compiler warnings, then rerun the guarded command-list build.
+- Fix the remaining compiler warning, then rerun the guarded command-list build.

@@ -68,9 +68,6 @@ set(COMMAND_HANDLER_SOURCES
 
 set(JSMN_SOURCES
     Services/jsmn/jsmn.c
-    Services/jsmn/jsmn_print_utils.c
-    Services/jsmn/jsmn_utils.c
-    Services/jsmn/json_cmd_launcher.c
 )
 
 set(RING_BUFFER_SOURCES
@@ -108,7 +105,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
+    JSMN_STRICT
 )
 
 # Remove wrong libob.a library dependency when using cpp files

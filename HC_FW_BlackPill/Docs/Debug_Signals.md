@@ -3,8 +3,9 @@
 This document defines the currently supported `dbg_signals` names for:
 
 - periodic `DBG` streaming via `SET {"dbg_period_ms":...,"dbg_signals":[...]}`
-- one-shot sampled reads via `GET {"dbg_signals":[...]}`
-- digital signal control via `SET {"dbg_signals":{"signal_name":boolean_value}}`
+- one-shot sampled reads by placing signal names directly in the `GET args`
+  array
+- digital signal control via direct `SET args` signal fields
 
 ## Behavior
 
@@ -12,9 +13,9 @@ This document defines the currently supported `dbg_signals` names for:
 - Unknown signal names are rejected by the command parser.
 - Requested signals are returned in the same order they were requested after duplicate removal.
 - Unavailable values are emitted as `null`.
-- ADC `.eng` values depend on per-channel `adc_cal` configuration.
+- ADC `.eng` values depend on per-channel ADC calibration configuration.
 - Periodic `STS` `vsupply` and `vshunt` use the `adc.vupstream.eng` and `adc.ltc3901_vcc.eng` values when those calibrations are valid, falling back to pin-level `.mv` values otherwise.
-- Only settable digital signals can be controlled via `SET {"dbg_signals":{...}}`; attempting to set read-only signals will result in an error.
+- Only settable digital signals can be controlled via direct `SET args` signal fields; attempting to set read-only signals will result in an error.
 
 ## Types
 
@@ -35,7 +36,7 @@ This document defines the currently supported `dbg_signals` names for:
 JSON Example:
 
 ```json
-{"type":"GET","msg":100,"args":{"dbg_signals":["adc.vupstream.raw","adc.vupstream.mv","adc.vupstream.eng"]}}
+{"type":"GET","msg":100,"args":["adc.vupstream.raw","adc.vupstream.mv","adc.vupstream.eng"]}
 ```
 
 ```json
@@ -53,7 +54,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":110,"args":{"dbg_signals":["adc.ltc3901_vcc.raw","adc.ltc3901_vcc.mv","adc.ltc3901_vcc.eng"]}}
+{"type":"GET","msg":110,"args":["adc.ltc3901_vcc.raw","adc.ltc3901_vcc.mv","adc.ltc3901_vcc.eng"]}
 ```
 
 ```json
@@ -71,7 +72,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":120,"args":{"dbg_signals":["adc.lt8316_vout.raw","adc.lt8316_vout.mv","adc.lt8316_vout.eng"]}}
+{"type":"GET","msg":120,"args":["adc.lt8316_vout.raw","adc.lt8316_vout.mv","adc.lt8316_vout.eng"]}
 ```
 
 ```json
@@ -89,7 +90,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":130,"args":{"dbg_signals":["adc.ltc3901_me.raw","adc.ltc3901_me.mv","adc.ltc3901_me.eng"]}}
+{"type":"GET","msg":130,"args":["adc.ltc3901_me.raw","adc.ltc3901_me.mv","adc.ltc3901_me.eng"]}
 ```
 
 ```json
@@ -107,7 +108,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":140,"args":{"dbg_signals":["adc.ltc3901_mf.raw","adc.ltc3901_mf.mv","adc.ltc3901_mf.eng"]}}
+{"type":"GET","msg":140,"args":["adc.ltc3901_mf.raw","adc.ltc3901_mf.mv","adc.ltc3901_mf.eng"]}
 ```
 
 ```json
@@ -125,7 +126,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":150,"args":{"dbg_signals":["adc.lt8316_gate.raw","adc.lt8316_gate.mv","adc.lt8316_gate.eng"]}}
+{"type":"GET","msg":150,"args":["adc.lt8316_gate.raw","adc.lt8316_gate.mv","adc.lt8316_gate.eng"]}
 ```
 
 ```json
@@ -143,7 +144,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":160,"args":{"dbg_signals":["adc.temp.raw","adc.temp.mv","adc.temp.eng"]}}
+{"type":"GET","msg":160,"args":["adc.temp.raw","adc.temp.mv","adc.temp.eng"]}
 ```
 
 ```json
@@ -161,7 +162,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":170,"args":{"dbg_signals":["adc.vrefint.raw","adc.vrefint.mv","adc.vrefint.eng"]}}
+{"type":"GET","msg":170,"args":["adc.vrefint.raw","adc.vrefint.mv","adc.vrefint.eng"]}
 ```
 
 ```json
@@ -197,7 +198,7 @@ JSON Example:
 JSON Example:
 
 ```json
-{"type":"GET","msg":200,"args":{"dbg_signals":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count"]}}
+{"type":"GET","msg":200,"args":["pwm.me.freq_hz","pwm.me.duty_pct","pwm.mf.freq_hz","pwm.mf.duty_pct","pwm.gate.freq_hz","pwm.gate.valid","pwm.gate.rise_count"]}
 ```
 
 ```json
@@ -219,27 +220,26 @@ Notes:
 | `led.red`        | `bool`   | n/a   | Yes      | Red LED state              |
 | `led.green`      | `bool`   | n/a   | Yes      | Green LED state            |
 | `sync.enable`    | `bool`   | n/a   | No       | LTC3901 manager-owned SYNC output enable state |
-| `hc.state`       | `string` | n/a   | No       | top-level HC state         |
 | `ltc3901.state`  | `string` | n/a   | No       | LTC3901 manager state      |
 | `lt8316.state`   | `string` | n/a   | No       | LT8316 manager state       |
 
 JSON Example:
 
 ```json
-{"type":"GET","msg":220,"args":{"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","led.blue","led.red","led.green","sync.enable","hc.state","ltc3901.state","lt8316.state"]}}
+{"type":"GET","msg":220,"args":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","led.blue","led.red","led.green","sync.enable","ltc3901.state","lt8316.state"]}
 ```
 
 ```json
-{"type":"SET","msg":221,"args":{"dbg_period_ms":100,"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","led.blue","led.red","led.green","sync.enable","hc.state","ltc3901.state","lt8316.state"]}}
+{"type":"SET","msg":221,"args":{"dbg_period_ms":100,"dbg_signals":["beam_on","ltc3901.pwr_en","lt8316.pwr_en","led.blue","led.red","led.green","sync.enable","ltc3901.state","lt8316.state"]}}
 ```
 
 ```json
-{"type":"SET","msg":222,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}}
+{"type":"SET","msg":222,"args":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}
 ```
 
 Notes:
 
-- Settable digital signals (`ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`) can be controlled using `SET` with `dbg_signals` as an object containing signal-value pairs.
+- Settable digital signals (`ltc3901.pwr_en`, `lt8316.pwr_en`, `led.blue`, `led.red`, `led.green`) can be controlled using `SET` with direct signal-value pairs in `args`.
 - `ltc3901.pwr_en` now sets the LTC3901 manager request; the manager owns the actual LTC3901 power and SYNC outputs.
 - `lt8316.pwr_en` now sets the LT8316 manager request; the manager owns the actual LT8316 HV power output.
 - Prefer explicit manager commands for LTC3901 control:
@@ -249,14 +249,15 @@ Notes:
 - Prefer explicit manager commands for LT8316 control:
   - `{"type":"SET","msg":127,"args":{"lt8316_cmd":"RUN"}}`
   - `{"type":"SET","msg":128,"args":{"lt8316_cmd":"RESET"}}`
-- Read-only signals (`beam_on`, `hc.state`, etc.) cannot be set and will return an error if attempted.
+- Read-only signals (`beam_on`, `sync.enable`, `ltc3901.state`, etc.) cannot be set and will return an error if attempted.
 
 ## Calibration Notes
 
 - Engineering conversion uses:
   - `engineering = ((SlopeScaled * raw_counts) / 1000000) + Offset`
 - Calibration is independent per ADC channel.
-- `adc_cal.channel` for `SET`, and `args.adc_cal` for `GET`, may use either a numeric ADC channel index or one of these names:
+- `GET` and `SET` calibration use direct `adc.<channel>.<field>` names, where `<field>` is `slope_scaled`, `offset`, or `valid`.
+- Supported ADC channel names are:
   - `vupstream`
   - `ltc3901_vcc`
   - `lt8316_vout`
@@ -265,7 +266,7 @@ Notes:
   - `lt8316_gate`
   - `temp`
   - `vrefint`
-- `adc_cal.valid = false` disables `.eng` output for that channel and the `.eng` signal returns `null`.
+- `adc.<channel>.valid = false` disables `.eng` output for that channel and the `.eng` signal returns `null`.
 - Calibration values are currently stored in RAM only.
 - `STS` `vsupply` and `vshunt` are expected to represent circuit sense-point millivolts. Configure `vupstream` and `ltc3901_vcc` calibration so their `.eng` values include the external divider/gain from ADC pin voltage back to the circuit sense point.
 - `vupstream` and `ltc3901_vcc` default to a 100 k high-side / 37.4 k low-side divider scale factor. This gives a default multiplier of approximately `3.6738` from ADC pin voltage to circuit sense-point voltage, or `slope_scaled = 2960569` in the raw-count engineering conversion.
@@ -280,9 +281,9 @@ Enable Debug
 
 {"type":"SET","msg":101,"args":{"dbg_period_ms":5000,"dbg_signals":["adc.vupstream.raw","adc.vupstream.mv","adc.vupstream.eng"]}}
 
-{"type":"GET","msg":1,"args":{"dbg_period_ms":true,"dbg_signals":true}}
+{"type":"GET","msg":1,"args":["dbg_period_ms","dbg_signals"]}
 
-{"type":"SET","msg":222,"args":{"dbg_signals":{"led.red":true}}}
+{"type":"SET","msg":222,"args":{"led.red":true}}
 
 {"type":"SET","msg":222,"args":{"ltc3901_cmd":"RUN"}}
 ```

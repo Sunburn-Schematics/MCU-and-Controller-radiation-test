@@ -32,6 +32,7 @@ typedef enum
     HC_CMD_ERR_BAD_ARGS,
     HC_CMD_ERR_BAD_FIELD,
     HC_CMD_ERR_BAD_VALUE,
+    HC_CMD_ERR_BAD_STATE,
     HC_CMD_ERR_NOT_SUPPORTED,
     HC_CMD_ERR_INTERNAL
 } hc_cmd_status_t;

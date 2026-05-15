@@ -7,10 +7,9 @@ This document provides simple test vectors for the current first-slice HC comman
 Current implemented scope:
 - command processor frames one complete top-level JSON object from the USB byte stream
 - `CommandHandler` supports `SET` and `GET`
-- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, `args.adc_cal`, `args.ltc3901_cmd`, `args.lt8316_cmd`, `args.ltc3901_cfg`, and `args.lt8316_cfg`
-- `SET` also supports `args.dbg_signals` as an object for setting digital signal values (power enables and LEDs)
+- `SET` currently supports `args.date_time`, `args.sts_period_ms`, `args.dbg_period_ms`, `args.dbg_signals`, `args.hc_cmd`, direct `adc.<channel>.slope_scaled`, `adc.<channel>.offset`, and `adc.<channel>.valid` calibration fields, `args.ltc3901_cmd`, `args.lt8316_cmd`, direct `ltc3901.<field>` and `lt8316.<field>` manager config fields, and direct settable digital signal fields
 - a `SET` request may include multiple supported fields; all valid fields are applied and the response contains one combined `args` object
-- `GET` currently supports `args.date_time`, `args.sw_version`, `args.raw_adc`, `args.dbg_period_ms`, `args.dbg_signals`, `args.adc_cal`, `args.ltc3901_cfg`, and `args.lt8316_cfg`
+- `GET` currently supports `args.date_time`, `args.sw_version`, `args.dbg_period_ms`, `args.dbg_signals`, direct debug signal names, direct `adc.<channel>.<field>` calibration fields, `args.ltc3901`, and `args.lt8316`
 - timestamps use seconds-only format: `YYYYMMDD HH:MM:SS`
 - `RSP.hc`, `EVT.hc`, and periodic `STS.hc_id` use the same HC identifier sourced from board status
 - periodic `STS` transmission is emitted by `fw_app_run()` at a configurable millisecond interval
@@ -62,7 +61,7 @@ Notes:
 
 Request:
 ```json
-{"type":"GET","msg":1,"args":{"date_time":true}}
+{"type":"GET","msg":1,"args":["date_time"]}
 ```
 
 Expected response:
@@ -72,7 +71,7 @@ Expected response:
 
 Notes:
 - this is the primary `GET` happy-path example
-- `args.date_time` is currently a boolean selector for `GET`
+- `date_time` is requested by including it in the `GET args` array
 - returned `args.date_time` should match the current HC RTC-backed time
 
 ---
@@ -81,17 +80,35 @@ Notes:
 
 Request:
 ```json
-{"type":"GET","msg":2,"args":{"sw_version":true}}
+{"type":"GET","msg":2,"args":["sw_version"]}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":2,"ts":"20260501 10:30:00","args":{"sw_version":"0.1.0"}}
+{"type":"RSP","hc":1,"msg":2,"ts":"20260501 10:30:00","args":{"sw_version":"0.1.2"}}
 ```
 
 Notes:
-- `args.sw_version` is currently a boolean selector for `GET`
+- `sw_version` is requested by including it in the `GET args` array
 - returned `args.sw_version` is compiled into the firmware using `SW_VERSION_STRING`
+
+---
+
+### 3b. Valid `SET hc_cmd RESET`
+
+Request:
+```json
+{"type":"SET","msg":4,"args":{"hc_cmd":"RESET"}}
+```
+
+Expected response before reset:
+```json
+{"type":"RSP","hc":1,"msg":4,"ts":"20260602 03:04:05","args":{"hc_cmd":"RESET"}}
+```
+
+Notes:
+- `hc_cmd:"RESET"` schedules an MCU software reset after the response is sent.
+- The RTC backup domain is not reset by this command; the date/time should continue across the restart.
 
 ---
 
@@ -169,7 +186,7 @@ Notes:
 
 Request:
 ```json
-{"type":"GET","msg":22,"args":{"dbg_period_ms":true}}
+{"type":"GET","msg":22,"args":["dbg_period_ms"]}
 ```
 
 Expected response:
@@ -178,8 +195,8 @@ Expected response:
 ```
 
 Notes:
-- `GET` returns both `dbg_period_ms` and `dbg_signals` even if only one selector key is present
-- `args.dbg_signals:true` is also accepted as the selector
+- `GET args:["dbg_period_ms"]` and `GET args:["dbg_signals"]` both return the
+  current debug telemetry configuration
 
 ---
 
@@ -187,7 +204,7 @@ Notes:
 
 Request:
 ```json
-{"type":"GET","msg":23,"args":{"dbg_signals":["adc.vupstream.raw","adc.vupstream.eng"]}}
+{"type":"GET","msg":23,"args":["adc.vupstream.raw","adc.vupstream.eng"]}
 ```
 
 Expected response:
@@ -197,7 +214,7 @@ Expected response:
 
 Notes:
 - this is a one-shot sampled read, not a subscription change
-- invalid requested signals are returned as `null`
+- invalid signal names produce a `BAD_VALUE` response
 - this does not modify the periodic `DBG` publisher configuration
 
 ---
@@ -206,16 +223,16 @@ Notes:
 
 Request:
 ```json
-{"type":"SET","msg":23,"args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":-100,"valid":true}}}
+{"type":"SET","msg":23,"args":{"adc.ltc3901_me.slope_scaled":2500,"adc.ltc3901_me.offset":-100,"adc.ltc3901_me.valid":true}}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":23,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":-100,"valid":true}}}
+{"type":"RSP","hc":1,"msg":23,"ts":"20260501 10:30:00","args":{"adc.ltc3901_me.slope_scaled":2500,"adc.ltc3901_me.offset":-100,"adc.ltc3901_me.valid":true}}
 ```
 
 Notes:
-- this configures the engineering-unit conversion for ADC channel `3`
+- this configures the engineering-unit conversion for ADC channel `ltc3901_me`
 - conversion is `y = ((slope_scaled * raw_counts) / 1000000) + offset`
 
 ---
@@ -224,12 +241,12 @@ Notes:
 
 Request:
 ```json
-{"type":"SET","msg":24,"args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}}
+{"type":"SET","msg":24,"args":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"dbg_signals":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}}
+{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"ltc3901.pwr_en":true,"lt8316.pwr_en":false,"led.blue":true,"led.red":false,"led.green":true}}
 ```
 
 Notes:
@@ -302,16 +319,16 @@ Notes:
 
 Request:
 ```json
-{"type":"GET","msg":126,"args":{"ltc3901_cfg":true}}
+{"type":"GET","msg":126,"args":["ltc3901"]}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":126,"ts":"20260501 10:30:00","args":{"ltc3901_cfg":{"isupply_ma_max":50,"vupstream_mv_min":10000,"ltc3901_vcc_mv_min":10000,"power_up_timeout_ms":2000,"power_retry_delay_ms":1000,"power_fault_max":3,"sync_on_delay_ms":1000,"sync_hold_on_time_ms":10000,"sync_hold_off_time_ms":2000,"sync_stabilization_time_ms":100,"sync_fault_delay_ms":1000}}}
+{"type":"RSP","hc":1,"msg":126,"ts":"20260501 10:30:00","args":{"ltc3901":{"isupply_ma_max":50,"vupstream_mv_min":10000,"ltc3901_vcc_mv_min":10000,"power_up_timeout_ms":2000,"power_retry_delay_ms":1000,"power_fault_max":3,"sync_on_delay_ms":1000,"sync_hold_on_time_ms":10000,"sync_hold_off_time_ms":2000,"sync_stabilization_time_ms":100,"sync_fault_delay_ms":1000}}}
 ```
 
 Notes:
-- `args.ltc3901_cfg` is a boolean selector for `GET`
+- `ltc3901` is requested by including it in the `GET args` array
 - all LTC3901 manager runtime config fields are returned
 
 ---
@@ -320,17 +337,17 @@ Notes:
 
 Request:
 ```json
-{"type":"SET","msg":127,"args":{"ltc3901_cfg":{"isupply_ma_max":75,"power_up_timeout_ms":2500}}}
+{"type":"SET","msg":127,"args":{"ltc3901.isupply_ma_max":75,"ltc3901.power_up_timeout_ms":2500}}
 ```
 
 Expected response shape:
 ```json
-{"type":"RSP","hc":1,"msg":127,"ts":"20260501 10:30:00","args":{"ltc3901_cfg":{"isupply_ma_max":75,"vupstream_mv_min":10000,"ltc3901_vcc_mv_min":10000,"power_up_timeout_ms":2500,"power_retry_delay_ms":1000,"power_fault_max":3,"sync_on_delay_ms":1000,"sync_hold_on_time_ms":10000,"sync_hold_off_time_ms":2000,"sync_stabilization_time_ms":100,"sync_fault_delay_ms":1000}}}
+{"type":"RSP","hc":1,"msg":127,"ts":"20260501 10:30:00","args":{"ltc3901.isupply_ma_max":75,"ltc3901.power_up_timeout_ms":2500}}
 ```
 
 Notes:
-- `SET args.ltc3901_cfg` accepts partial updates
-- the response echoes the resulting full runtime config
+- `SET` accepts direct `ltc3901.<field>` partial updates
+- the response echoes the fields that were applied
 
 ---
 
@@ -338,16 +355,16 @@ Notes:
 
 Request:
 ```json
-{"type":"GET","msg":128,"args":{"lt8316_cfg":true}}
+{"type":"GET","msg":128,"args":["lt8316"]}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":128,"ts":"20260501 10:30:00","args":{"lt8316_cfg":{"power_retry_delay_ms":1000,"power_fault_max":3,"power_on_stabilization_time_ms":1000}}}
+{"type":"RSP","hc":1,"msg":128,"ts":"20260501 10:30:00","args":{"lt8316":{"power_retry_delay_ms":1000,"power_fault_max":3,"power_on_stabilization_time_ms":1000}}}
 ```
 
 Notes:
-- `args.lt8316_cfg` is a boolean selector for `GET`
+- `lt8316` is requested by including it in the `GET args` array
 - all LT8316 manager runtime config fields are returned
 
 ---
@@ -356,17 +373,17 @@ Notes:
 
 Request:
 ```json
-{"type":"SET","msg":129,"args":{"lt8316_cfg":{"power_retry_delay_ms":1500,"power_fault_max":4}}}
+{"type":"SET","msg":129,"args":{"lt8316.power_retry_delay_ms":1500,"lt8316.power_fault_max":4}}
 ```
 
 Expected response shape:
 ```json
-{"type":"RSP","hc":1,"msg":129,"ts":"20260501 10:30:00","args":{"lt8316_cfg":{"power_retry_delay_ms":1500,"power_fault_max":4,"power_on_stabilization_time_ms":1000}}}
+{"type":"RSP","hc":1,"msg":129,"ts":"20260501 10:30:00","args":{"lt8316.power_retry_delay_ms":1500,"lt8316.power_fault_max":4}}
 ```
 
 Notes:
-- `SET args.lt8316_cfg` accepts partial updates
-- the response echoes the resulting full runtime config
+- `SET` accepts direct `lt8316.<field>` partial updates
+- the response echoes the fields that were applied
 
 ---
 
@@ -389,16 +406,16 @@ Notes:
 
 ---
 
-### 20. Valid `GET adc_cal`
+### 20. Valid `GET` direct ADC calibration fields
 
 Request:
 ```json
-{"type":"GET","msg":24,"args":{"adc_cal":3}}
+{"type":"GET","msg":24,"args":["adc.ltc3901_me.slope_scaled","adc.ltc3901_me.offset","adc.ltc3901_me.valid"]}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":3,"slope_scaled":2500,"offset":-100,"valid":true}}}
+{"type":"RSP","hc":1,"msg":24,"ts":"20260501 10:30:00","args":{"adc.ltc3901_me.slope_scaled":2500,"adc.ltc3901_me.offset":-100,"adc.ltc3901_me.valid":true}}
 ```
 
 ---
@@ -407,30 +424,31 @@ Expected response:
 
 Request:
 ```json
-{"type":"SET","msg":25,"args":{"adc_cal":{"channel":"vupstream","slope_scaled":2500,"offset":-100,"valid":true}}}
+{"type":"SET","msg":25,"args":{"adc.vupstream.slope_scaled":2500,"adc.vupstream.offset":-100,"adc.vupstream.valid":true}}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":25,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":0,"slope_scaled":2500,"offset":-100,"valid":true}}}
+{"type":"RSP","hc":1,"msg":25,"ts":"20260501 10:30:00","args":{"adc.vupstream.slope_scaled":2500,"adc.vupstream.offset":-100,"adc.vupstream.valid":true}}
 ```
 
 Notes:
-- channel names are accepted as an alternative to numeric ADC channel indices
-- the response continues to report the resolved numeric channel index
+- `SET` uses direct hierarchical ADC calibration field names
+- one or more calibration fields for a channel may be provided; omitted fields
+  retain their current values
 
 ---
 
-### 22. Valid `GET adc_cal` with channel name
+### 22. Valid `GET` direct ADC calibration fields by channel name
 
 Request:
 ```json
-{"type":"GET","msg":26,"args":{"adc_cal":"vupstream"}}
+{"type":"GET","msg":26,"args":["adc.vupstream.slope_scaled","adc.vupstream.offset","adc.vupstream.valid"]}
 ```
 
 Expected response:
 ```json
-{"type":"RSP","hc":1,"msg":26,"ts":"20260501 10:30:00","args":{"adc_cal":{"channel":0,"slope_scaled":2500,"offset":-100,"valid":true}}}
+{"type":"RSP","hc":1,"msg":26,"ts":"20260501 10:30:00","args":{"adc.vupstream.slope_scaled":2500,"adc.vupstream.offset":-100,"adc.vupstream.valid":true}}
 ```
 
 ---
@@ -461,7 +479,7 @@ Notes:
 
 Example emitted line:
 ```json
-{"type":"STS","hc_id":1,"ts":"20260501 10:30:00","state":"NORMAL","beam_on":false,"duts":{"LTC3901":{"state":"RESET","pwr_en":false,"sync":false,"vsupply":null,"vshunt":null,"isupply":null,"me_freq":null,"me_ratio":null,"me_anlg":null,"mf_freq":null,"mf_ratio":null,"mf_anlg":null},"LT8316":{"state":"RESET","pwr_en":false,"gate_freq":null,"gate_anlg":null,"vout":null}}}
+{"type":"STS","hc_id":1,"ts":"20260501 10:30:00","beam_on":false,"duts":{"LTC3901":{"state":"RESET","pwr_en":false,"sync":false,"vsupply":null,"vshunt":null,"isupply":null,"me_freq":null,"me_ratio":null,"me_anlg":null,"mf_freq":null,"mf_ratio":null,"mf_anlg":null},"LT8316":{"state":"RESET","pwr_en":false,"gate_freq":null,"gate_anlg":null,"vout":null}}}
 ```
 
 Notes:
@@ -534,6 +552,44 @@ Notes:
 
 ---
 
+### 24a. Unknown packet type
+
+Request:
+```json
+{"type":"NOPE","msg":2024,"args":[]}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"ts":"<current_hc_time>","error":{"code":"BAD_TYPE","message":"Unsupported or missing packet type"}}
+```
+
+Notes:
+- unknown `type` values are rejected during request parsing before `msg` is
+  captured, so the response does not echo `msg`.
+
+---
+
+### 24b. `hc_cmd RESET` combined with another `SET` field
+
+Request:
+```json
+{"type":"SET","msg":2025,"args":{"hc_cmd":"RESET","sts_period_ms":1000}}
+```
+
+Expected response could / should be:
+```json
+{"type":"RSP","hc":1,"msg":2025,"ts":"<current_hc_time>","error":{"code":"BAD_STATE","message":"hc_cmd RESET must be sent as a standalone SET command"}}
+```
+
+Notes:
+- `hc_cmd:"RESET"` is a terminal host-controller action and must be sent as a
+  standalone `SET` command.
+- rejecting combined reset requests avoids applying partial configuration
+  updates immediately before an MCU reset.
+
+---
+
 ### 25. Missing supported field in `SET`
 
 Request:
@@ -543,7 +599,7 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cmd, lt8316_cmd, ltc3901_cfg, or lt8316_cfg"}}
+{"type":"RSP","hc":1,"msg":2,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"SET currently supports args.date_time, args.sts_period_ms, args.dbg_period_ms, args.dbg_signals, args.hc_cmd, direct adc.<channel> calibration fields, args.ltc3901_cmd, args.lt8316_cmd, direct ltc3901.<field> config fields, direct lt8316.<field> config fields, or direct settable digital signal fields"}}
 ```
 
 ---
@@ -603,7 +659,7 @@ Request:
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":5,"ts":"<current_hc_time>","error":{"code":"BAD_ARGS","message":"GET requires an args object"}}
+{"type":"RSP","hc":1,"msg":5,"ts":"<current_hc_time>","error":{"code":"BAD_ARGS","message":"GET requires args to be an array of field names"}}
 ```
 
 ---
@@ -612,12 +668,12 @@ Expected response could / should be:
 
 Request:
 ```json
-{"type":"GET","msg":6,"args":{}}
+{"type":"GET","msg":6,"args":[]}
 ```
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports args.date_time, args.sw_version, args.raw_adc, dbg_period_ms, dbg_signals, adc_cal, ltc3901_cfg, or lt8316_cfg"}}
+{"type":"RSP","hc":1,"msg":6,"ts":"<current_hc_time>","error":{"code":"BAD_FIELD","message":"GET currently supports date_time, sw_version, dbg_period_ms, dbg_signals, direct debug signal names, direct adc.<channel> calibration fields, ltc3901, or lt8316"}}
 ```
 
 ---
@@ -654,40 +710,40 @@ Expected response could / should be:
 
 Request:
 ```json
-{"type":"SET","msg":25,"args":{"adc_cal":{"channel":99,"slope_scaled":2500,"offset":0,"valid":true}}}
+{"type":"SET","msg":25,"args":{"adc.not_a_channel.slope_scaled":2500,"adc.not_a_channel.offset":0,"adc.not_a_channel.valid":true}}
 ```
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":25,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"args.adc_cal.channel is out of range"}}
+{"type":"RSP","hc":1,"msg":25,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"ADC calibration SET requires one or more adc.<channel> calibration fields for one channel"}}
 ```
 
 ---
 
-### 34. Invalid `GET dbg_signals`
+### 34. Invalid debug signal name in `GET args`
 
 Request:
 ```json
-{"type":"GET","msg":26,"args":{"dbg_signals":["adc.vupstream.raw","not.a.real.signal"]}}
+{"type":"GET","msg":26,"args":["adc.vupstream.raw","not.a.real.signal"]}
 ```
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":26,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"GET args.dbg_period_ms must be true, and args.dbg_signals must be true or a valid signal array"}}
+{"type":"RSP","hc":1,"msg":26,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"GET args contains an invalid selector value"}}
 ```
 
 ---
 
-### 35. `GET args.date_time` not `true`
+### 35. `GET args` not an array
 
 Request:
 ```json
-{"type":"GET","msg":7,"args":{"date_time":false}}
+{"type":"GET","msg":7,"args":false}
 ```
 
 Expected response could / should be:
 ```json
-{"type":"RSP","hc":1,"msg":7,"ts":"<current_hc_time>","error":{"code":"BAD_VALUE","message":"GET args.date_time must be true"}}
+{"type":"RSP","hc":1,"msg":7,"ts":"<current_hc_time>","error":{"code":"BAD_ARGS","message":"GET requires args to be an array of field names"}}
 ```
 
 ---
@@ -822,7 +878,7 @@ Notes:
 
 Input stream:
 ```text
-{"type":"SET","msg":20,"args":{"date_time":"20260501 10:30:00"}}{"type":"GET","msg":21,"args":{"date_time":true}}
+{"type":"SET","msg":20,"args":{"date_time":"20260501 10:30:00"}}{"type":"GET","msg":21,"args":["date_time"]}
 ```
 
 Expected behavior:

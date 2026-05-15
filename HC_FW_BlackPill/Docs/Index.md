@@ -1,49 +1,40 @@
 # Documentation Index
 
-This file is the top-level reference for locating and editing the HC documentation set.
+This file is the top-level navigation point for the project documentation set.
+Update it when documentation files are added, removed, renamed, split, or
+consolidated.
 
-## Maintenance Rule
-- Update this index whenever files are added to this folder.
-- Update this index whenever a file is significantly reworked, renamed, split, or consolidated.
-- Use this file as the first navigation point before editing documentation.
+## Requirements
 
-## Folder
-- `./Docs`
+- [requirements/Index.md](./requirements/Index.md) - requirements folder index.
+- [requirements/host_controller/Index.md](./requirements/host_controller/Index.md) - Host Controller requirements index.
 
-## Files
+Current Host Controller requirements:
 
-- [hc_architecture_v1.md](./hc_architecture_v1.md) — Firmware architecture, module decomposition, and control ownership.
-- [hc_fault_response_matrix_v1.md](./hc_fault_response_matrix_v1.md) — Fault classes, responses, latching, clearing, and recovery policy matrix.
-- [hc_prd_v1.md](./hc_prd_v1.md) — Primary Product Requirements Document for the Host Controller.
-- [hc_product_specification_amalgamated_v1.md](./hc_product_specification_amalgamated_v1.md) — Full concatenated source bundle of the current HC specification set.
-- [hc_product_specification_review_v1.md](./hc_product_specification_review_v1.md) — Cleaned unified review edition of the HC product specification.
-- [hc_product_specification_review_v1.pdf](./hc_product_specification_review_v1.pdf) — PDF rendering of the cleaned unified review edition for human review.
-- [hc_protocol_test_plan_v1.md](./hc_protocol_test_plan_v1.md) — Protocol-oriented verification and test planning for HC/TE behavior.
-- [hc_state_machine_spec_v1.md](./hc_state_machine_spec_v1.md) — Formal top-level HC state machine definition and state rules.
-- [hc_story_backlog_v1.md](./hc_story_backlog_v1.md) — Implementation backlog and story decomposition.
-- [hc_te_interface_spec_v1.md](./hc_te_interface_spec_v1.md) — HC-to-TE interface specification, including periodic STS reporting model.
-- [hc_variable_registry_v1.md](./hc_variable_registry_v1.md) — Registry of named variable placeholders for deferred numeric values.
-- [hc_verification_traceability_matrix_v1.md](./hc_verification_traceability_matrix_v1.md) — Traceability from requirements to verification intent and coverage.
-- [Debug_Signals.md](./Debug_Signals.md) — Dictionary of supported `dbg_signals` names, types, units, sources, and null behavior.
-- [DUT_Manager_State_Charts.md](./DUT_Manager_State_Charts.md) — Mermaid state chart diagrams for the implemented LTC3901 and LT8316 DUT managers.
-- [JSON_Tests.md](./JSON_Tests.md) — Current JSON request/response test vectors for command processor framing, SET/GET date_time behavior, and malformed-input checks.
-- [architecture.md](./architecture.md) — Current firmware layering, module boundaries, and local-driver implementation notes.
-- [pin_connections.md](./pin_connections.md) — Current STM32F401 Black Pill target pin assignments and peripheral mappings.
-- [requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md](./requirements/host_controller/hc_reset_reason_and_rtc_startup_policy_v1.md) — Reset-source capture, POR-gated RTC initialization policy, and retained reset-reason monitoring intent.
-- [tc_hc_jsonl_command_structure_preliminary_v1.md](./tc_hc_jsonl_command_structure_preliminary_v1.md) — Preliminary JSONL command structure for TC↔HC communications over USB VCP.
-- [Index.md](./Index.md) — Top-level navigation file for the documentation set.
+- [hc_prd.md](./requirements/host_controller/hc_prd.md) - implemented product requirements.
+- [hc_architecture.md](./requirements/host_controller/hc_architecture.md) - current firmware architecture.
+- [hc_te_interface_spec.md](./requirements/host_controller/hc_te_interface_spec.md) - JSON `GET` / `SET` TE interface and reporting.
+- [hc_state_machine_spec.md](./requirements/host_controller/hc_state_machine_spec.md) - implemented DUT manager state machines.
+- [hc_fault_response_matrix.md](./requirements/host_controller/hc_fault_response_matrix.md) - implemented manager fault/event responses.
+- [hc_variable_registry.md](./requirements/host_controller/hc_variable_registry.md) - implemented runtime variables and config fields.
+- [hc_protocol_test_plan.md](./requirements/host_controller/hc_protocol_test_plan.md) - implemented hardware test regime.
+- [hc_reset_reason_and_rtc_startup_policy.md](./requirements/host_controller/hc_reset_reason_and_rtc_startup_policy.md) - reset reason and RTC startup policy.
+- [hc_verification_traceability_matrix.md](./requirements/host_controller/hc_verification_traceability_matrix.md) - implementation-backed verification traceability.
+- [hc_implementation_alignment_20260515.md](./requirements/host_controller/hc_implementation_alignment_20260515.md) - implementation baseline captured on 2026-05-15.
 
-## Recommended Editing Order
-1. Start here to locate the authoritative artifact.
-2. Update the most specific source document first.
-3. Update derived review or amalgamated documents only when needed.
-4. Keep this index synchronized with the folder contents.
+## Firmware Reference
 
-## Recommended Source-of-Truth Usage
-- Use `hc_product_specification_review_v1.md` for offline human review of the current consolidated product definition.
-- Use `hc_product_specification_amalgamated_v1.md` only when cross-checking source content in bulk.
-- Use the specific source files for detailed edits in their own domains.
+- [architecture.md](./architecture.md) - firmware layering and module notes.
+- [pin_connections.md](./pin_connections.md) - target pin assignments and peripheral mappings.
+- [Debug_Signals.md](./Debug_Signals.md) - debug telemetry data dictionary.
+- [DUT_Manager_State_Charts.md](./DUT_Manager_State_Charts.md) - DUT manager state chart diagrams.
+- [Command_Reference.md](./Command_Reference.md) - TE/HC JSON command and response reference.
+- [Command_Syntax.md](./Command_Syntax.md) - formal syntax diagrams for implemented TE/HC JSON commands.
+- [JSON_Tests.md](./JSON_Tests.md) - JSON protocol examples and test vectors.
 
-## Note
-- `architecture.md` has been updated to describe the current `Drivers_Local/adc_sense_drv.*` ADC acquisition implementation and its present scope limitations.
-- `Debug_Signals.md` is the primary human-readable reference for the current debug telemetry data dictionary.
+## Notes
+
+- Historical Host Controller planning bundles and old Monitor state-transition
+  files have been removed from the current requirements tree.
+- Hardware test cases live in `Test/hw_test_cases.json`.
+- Durable hardware test reports are archived under `Test/Reports/`.

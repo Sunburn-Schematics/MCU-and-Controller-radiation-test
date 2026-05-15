@@ -58,12 +58,15 @@
 #define LT8316_POWER_RETRY_DELAY_MS             (1000U)
 #define LT8316_POWER_FAULT_MAX                  (0U)
 #define LT8316_POWER_ON_STABILIZATION_TIME_MS   (1000U)
+#define SYSTEM_RESET_DEFER_MS                   (250U)
 
 static uint32_t s_last_toggle_ms;
 static uint32_t s_last_sts_ms;
 static uint32_t s_sts_period_ms;
 static uint32_t s_app_started_ms;
+static uint32_t s_system_reset_requested_ms;
 static bool s_autostart_issued;
+static bool s_system_reset_requested;
 static ltc3901_manager_t s_ltc3901_manager;
 static ltc3901_manager_outputs_t s_ltc3901_outputs;
 static ltc3901_manager_request_t s_ltc3901_pending_request;
@@ -526,6 +529,13 @@ bool fw_app_set_lt8316_command(fw_app_lt8316_command_t command)
     }
 }
 
+bool fw_app_request_system_reset(void)
+{
+    s_system_reset_requested = true;
+    s_system_reset_requested_ms = HAL_GetTick();
+    return true;
+}
+
 const char *fw_app_get_sw_version(void)
 {
     return SW_VERSION_STRING;
@@ -589,6 +599,21 @@ static void send_periodic_status(void)
     (void)hc_comms_tx_send_line(sts_line);
 }
 
+static void service_system_reset(uint32_t now_ms)
+{
+    if (!s_system_reset_requested)
+    {
+        return;
+    }
+
+    if ((now_ms - s_system_reset_requested_ms) < SYSTEM_RESET_DEFER_MS)
+    {
+        return;
+    }
+
+    NVIC_SystemReset();
+}
+
 void fw_app_init(void)
 {
     uint32_t now_ms;
@@ -625,6 +650,8 @@ void fw_app_init(void)
     s_last_sts_ms = now_ms;
     s_app_started_ms = now_ms;
     s_autostart_issued = false;
+    s_system_reset_requested = false;
+    s_system_reset_requested_ms = 0U;
     s_sts_period_ms = STS_PERIOD_DEFAULT_MS;
     printf("App Initialized\r\n");
 }
@@ -660,6 +687,7 @@ void fw_app_run(void)
         send_periodic_status();
     }
     HAL_Delay(10);
+    service_system_reset(HAL_GetTick());
 
 }
 

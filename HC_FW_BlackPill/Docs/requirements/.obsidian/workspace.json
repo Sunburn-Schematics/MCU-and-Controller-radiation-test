@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "host_controller/hc_story_backlog_v1.md",
+                "file": "host_controller/hc_prd.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "hc_story_backlog_v1"
+              "title": "hc_prd"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "host_controller/hc_story_backlog_v1.md",
+                "file": "host_controller/hc_prd.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for hc_story_backlog_v1"
+              "title": "Backlinks for hc_prd"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "host_controller/hc_story_backlog_v1.md",
+                "file": "host_controller/hc_prd.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from hc_story_backlog_v1"
+              "title": "Outgoing links from hc_prd"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "host_controller/hc_story_backlog_v1.md",
+                "file": "host_controller/hc_prd.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of hc_story_backlog_v1"
+              "title": "Outline of hc_prd"
             }
           }
         ]
@@ -185,9 +185,9 @@
   },
   "active": "f8d882effc7dea92",
   "lastOpenFiles": [
-    "host_controller/hc_te_interface_spec_v1.md",
-    "host_controller/hc_variable_registry_v1.md",
-    "host_controller/hc_verification_traceability_matrix_v1.md",
-    "host_controller/hc_architecture_v1.md"
+    "host_controller/hc_te_interface_spec.md",
+    "host_controller/hc_variable_registry.md",
+    "host_controller/hc_verification_traceability_matrix.md",
+    "host_controller/hc_architecture.md"
   ]
 }

@@ -27,7 +27,6 @@
 #include <stddef.h>
 
 #define JSMN_PARENT_LINKS
-#define JSMN_UTIL_LINKS
 
 #ifdef __cplusplus
 extern "C" {

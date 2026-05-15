@@ -13,13 +13,6 @@ extern "C" {
 
 typedef struct
 {
-    bool Requested;
-    bool HasChannel;
-    uint32_t Channel;
-} hc_jsonl_get_raw_adc_request_t;
-
-typedef struct
-{
     uint32_t PeriodMs;
 } hc_jsonl_set_sts_period_request_t;
 
@@ -43,8 +36,11 @@ typedef struct
 typedef struct
 {
     uint32_t Channel;
+    bool HasSlopeScaled;
     int32_t SlopeScaled;
+    bool HasOffset;
     int32_t Offset;
+    bool HasValid;
     bool Valid;
 } hc_jsonl_set_adc_cal_request_t;
 
@@ -60,8 +56,16 @@ typedef struct
 
 typedef struct
 {
+    char Command[8];
+} hc_jsonl_set_hc_cmd_request_t;
+
+typedef struct
+{
     bool Requested;
     uint32_t Channel;
+    bool HasSlopeScaled;
+    bool HasOffset;
+    bool HasValid;
 } hc_jsonl_get_adc_cal_request_t;
 
 typedef struct
@@ -141,6 +145,11 @@ hc_cmd_status_t hc_jsonl_parse_set_lt8316_cmd(const char *line,
                                               const hc_cmd_request_t *request,
                                               hc_jsonl_set_lt8316_cmd_request_t *cmd_request_out);
 
+hc_cmd_status_t hc_jsonl_parse_set_hc_cmd(const char *line,
+                                          const jsmntok_t *tokens,
+                                          const hc_cmd_request_t *request,
+                                          hc_jsonl_set_hc_cmd_request_t *cmd_request_out);
+
 hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
                                              const jsmntok_t *tokens,
                                              const hc_cmd_request_t *request);
@@ -148,11 +157,6 @@ hc_cmd_status_t hc_jsonl_parse_get_date_time(const char *line,
 hc_cmd_status_t hc_jsonl_parse_get_sw_version(const char *line,
                                               const jsmntok_t *tokens,
                                               const hc_cmd_request_t *request);
-
-hc_cmd_status_t hc_jsonl_parse_get_raw_adc(const char *line,
-                                           const jsmntok_t *tokens,
-                                           const hc_cmd_request_t *request,
-                                           hc_jsonl_get_raw_adc_request_t *raw_adc_request_out);
 
 hc_cmd_status_t hc_jsonl_parse_get_debug_config(const char *line,
                                                 const jsmntok_t *tokens,

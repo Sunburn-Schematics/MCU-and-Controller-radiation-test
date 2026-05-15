@@ -6,7 +6,7 @@ Programs HC_FW_BlackPill through ST-Link/SWD and verifies runtime response over 
 Uses OpenOCD with the project target interface (`interface/stlink.cfg` and
 `target/stm32f4x.cfg`) to identify the STM32F411 target, program and verify the
 ELF image, then query the firmware over the USB virtual COM port with
-`GET args.sw_version:true`.
+`GET args:["sw_version"]`.
 #>
 
 param(
@@ -240,7 +240,7 @@ function Invoke-SwVersionQuery {
         $null = $port.ReadExisting()
 
         $messageId = 101
-        $command = '{"type":"GET","msg":101,"args":{"sw_version":true}}' + "`n"
+        $command = '{"type":"GET","msg":101,"args":["sw_version"]}' + "`n"
         $port.Write($command)
 
         $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)

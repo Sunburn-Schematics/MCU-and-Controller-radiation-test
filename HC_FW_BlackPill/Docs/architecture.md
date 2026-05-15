@@ -25,13 +25,13 @@ The intended architectural direction remains:
 App -> Services -> Drivers_Local -> Bsp -> HAL/Cube
 ```
 
-The current implementation has one deliberate command-facing exception: the JSONL command handler in `Services/CommandHandler` calls the `fw_app_*` application facade to apply user requests and query application-owned debug/status behavior. This keeps command parsing in Services while leaving hardware policy in App.
+The current implementation has one deliberate command-facing exception: the JSON command handler in `Services/CommandHandler` calls the `fw_app_*` application facade to apply user requests and query application-owned debug/status behavior. This keeps command parsing in Services while leaving hardware policy in App.
 
 Current high-level source dependencies are:
 
 - `Core/Src/main.c` captures reset reason during early user init, initializes CubeMX peripherals, calls `fw_app_init()` once, and calls `fw_app_run()` from the infinite loop.
 - `App/fw_app.c` coordinates BSP, ADC, PWM capture, USB-VCP, command processing, debug telemetry, status formatting, sync generation, and the DUT-local managers.
-- `Services/CommandHandler` parses JSONL commands and calls `fw_app_*` facade functions for application-owned settings.
+- `Services/CommandHandler` parses JSON commands and calls `fw_app_*` facade functions for application-owned settings.
 - `Drivers_Local` owns HAL-backed ADC, PWM capture, RTC, reset-reason, sync, and USB-VCP wrappers.
 - `Bsp/bsp_board.*` owns named board GPIO controls and board status reads.
 
@@ -48,7 +48,7 @@ Current `fw_app_run()` order is:
 1. service ADC acquisition
 2. service USB-VCP RX/TX
 3. service PWM capture bursts
-4. process JSONL commands
+4. process JSON commands
 5. refresh the application status snapshot from BSP/ADC/PWM sources
 6. run the LTC3901 manager and apply its output intents
 7. run the LT8316 manager and apply its output intents
@@ -68,9 +68,9 @@ The application currently:
 - configures the sync timer but leaves sync disabled until the LTC3901 manager enables it
 - periodically toggles the blue LED as a heartbeat
 - continuously captures ADC and PWM measurements
-- accepts JSONL `GET` / `SET` commands over USB-VCP
-- emits asynchronous JSONL `EVT` records for manager events
-- emits periodic JSONL `STS` records at a configurable interval
+- accepts JSON `GET` / `SET` commands over USB-VCP
+- emits asynchronous JSON `EVT` records for manager events
+- emits periodic JSON `STS` records at a configurable interval
 - runs the LTC3901 manager as the owner of LTC3901 power and sync policy
 - runs the LT8316 manager as the owner of LT8316 HV power policy
 - can optionally auto-issue one `RUN` request to each DUT manager after startup when compile-time `AUTOSTART_ENABLE` is non-zero
@@ -290,7 +290,7 @@ Design rules:
 
 #### `usb_vcp_drv.*`
 
-`usb_vcp_drv.*` wraps the USB CDC interface with RX/TX ring-buffer handling. `command_processor_task()` consumes bytes from this driver and `hc_comms_tx_send_line()` sends JSONL output through it.
+`usb_vcp_drv.*` wraps the USB CDC interface with RX/TX ring-buffer handling. `command_processor_task()` consumes bytes from this driver and `hc_comms_tx_send_line()` sends JSON output through it.
 
 ## Application Modules
 
@@ -303,7 +303,7 @@ Design rules:
 - compile-time autostart policy using `AUTOSTART_ENABLE` and `AUTOSTART_DELAY_MS`
 - LTC3901 and LT8316 manager instances, one-shot request storage, and provisional manager configuration constants
 - mapping manager output intents to `bsp_power_write()` and `sync_drv_enable()` / `sync_drv_disable()`
-- debug facade functions used by the JSONL command handler
+- debug facade functions used by the JSON command handler
 
 When autostart is enabled, `fw_app.c` waits `AUTOSTART_DELAY_MS` after `fw_app_init()` and then issues a single `RUN` request to each DUT manager that is still in `RESET` and does not already have a pending external request. Autostart is one-shot per boot; later `RESET` or `HALT` commands do not retrigger it.
 
@@ -324,13 +324,19 @@ Unavailable numeric measurements are formatted as JSON `null`.
 
 ### `hc_debug_telemetry.*`
 
-`hc_debug_telemetry` owns named debug signal lookup and periodic `DBG` output formatting. It exposes ADC, PWM, board, application-state, and selected digital signals. `ltc3901.pwr_en` and `lt8316.pwr_en` remain settable as compatibility manager requests. Explicit LTC3901 control should use `SET args.ltc3901_cmd`. `sync.enable` is observable but no longer directly settable because the LTC3901 manager owns sync control.
+`hc_debug_telemetry` owns named debug signal lookup and periodic `DBG` output formatting. It exposes ADC, PWM, board, DUT manager state, and selected digital signals. `ltc3901.pwr_en` and `lt8316.pwr_en` remain settable as compatibility manager requests. Explicit LTC3901 control should use `SET args.ltc3901_cmd`. `sync.enable` is observable but no longer directly settable because the LTC3901 manager owns sync control.
+
+Host-controller-level commands are accepted through `SET args.hc_cmd`. The
+implemented `RESET` command acknowledges the request and then performs a
+deferred MCU software reset using `NVIC_SystemReset()`. The reset does not
+rewrite the RTC backup domain, so RTC date/time is preserved according to the
+reset and RTC startup policy.
 
 ### `ltc3901_manager.*`
 
 `ltc3901_manager` owns the DUT1 LTC3901 state table and produces hardware output intents. It does not call BSP or drivers directly. `fw_app.c` supplies sampled inputs and applies outputs.
 
-The LTC3901 manager runtime configuration is stored in `fw_app.c`, initialized from compile-time defaults, and consumed by the manager on each superloop pass. The current JSONL interface supports partial runtime updates through `SET args.ltc3901_cfg` and full readback through `GET args.ltc3901_cfg:true`.
+The LTC3901 manager runtime configuration is stored in `fw_app.c`, initialized from compile-time defaults, and consumed by the manager on each superloop pass. The current JSON interface supports partial runtime updates through direct `SET args.ltc3901.<field>` values and full readback through `GET args:["ltc3901"]`.
 
 External LTC3901 commands are accepted through `SET args.ltc3901_cmd`:
 
@@ -355,7 +361,7 @@ Current manager states are:
 
 `lt8316_manager` owns the DUT2 LT8316 state table and produces the HV power-enable output intent. It does not call BSP or drivers directly. `fw_app.c` supplies sampled inputs and applies outputs.
 
-The LT8316 manager runtime configuration is stored in `fw_app.c`, initialized from compile-time defaults, and consumed by the manager on each superloop pass. The current JSONL interface supports partial runtime updates through `SET args.lt8316_cfg` and full readback through `GET args.lt8316_cfg:true`.
+The LT8316 manager runtime configuration is stored in `fw_app.c`, initialized from compile-time defaults, and consumed by the manager on each superloop pass. The current JSON interface supports partial runtime updates through direct `SET args.lt8316.<field>` values and full readback through `GET args:["lt8316"]`.
 
 External LT8316 commands are accepted through `SET args.lt8316_cmd`. The compatibility debug signal `lt8316.pwr_en` maps `true` to `RUN` and `false` to `RESET`:
 
@@ -374,13 +380,13 @@ Current manager states are:
 
 ### `Services/CommandHandler`
 
-The command handler owns JSONL framing, parsing, dispatch, response formatting, and command-time validation. It supports date/time, status period, debug telemetry configuration, ADC calibration, raw/debug signal reads, and debug digital signal writes.
+The command handler owns JSON object framing, parsing, dispatch, response formatting, and command-time validation. It supports date/time, status period, debug telemetry configuration, ADC calibration, raw/debug signal reads, and debug digital signal writes.
 
 Command handlers do not directly touch BSP or drivers. They call `fw_app_*` facade functions for application-owned behavior.
 
-`hc_datetime.*` lives in this folder and provides command/status-facing timestamp formatting and fallback handling. JSONL responses, asynchronous `EVT` output, and periodic `STS` output use the HC datetime string format `YYYYMMDD HH:MM:SS`.
+`hc_datetime.*` lives in this folder and provides command/status-facing timestamp formatting and fallback handling. JSON responses, asynchronous `EVT` output, and periodic `STS` output use the HC datetime string format `YYYYMMDD HH:MM:SS`.
 
-The firmware exposes a compile-time software version string through `GET args.sw_version:true`. The default is `SW_VERSION_STRING`, which can be overridden by the build system with a compiler definition.
+The firmware exposes a compile-time software version string through `GET args:["sw_version"]`. The default is `SW_VERSION_STRING`, which can be overridden by the build system with a compiler definition.
 
 Manager-generated `EVT` records currently use an `args.msg` text payload prefixed with the related device name, for example `LTC3901:` or `LT8316:`. Fault messages include measurement evidence and the configured comparison value where available; retry messages include retry count and maximum retry count.
 

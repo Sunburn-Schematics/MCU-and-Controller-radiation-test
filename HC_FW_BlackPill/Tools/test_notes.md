@@ -4,7 +4,7 @@ Goal: provide a repeatable hardware-in-the-loop test process that can be run aft
 
 Current scope:
 - transport: USB CDC / VCP
-- protocol: JSONL request/response
+- protocol: JSON request/response
 - case source: `Test/hw_test_cases.json`
 - report output: `build/<Preset>/hw_tests/<timestamp>/summary.md`
 - transcript output: `build/<Preset>/hw_tests/<timestamp>/results.jsonl`
@@ -46,7 +46,7 @@ Test flow:
 3. Discover the USB CDC/VCP serial port. Do not assume it will always be `COM7`.
 4. Load test definitions from `Test/hw_test_cases.json`.
 5. Open the serial port and clear stale input.
-6. Send each test request as compact JSON plus newline.
+6. Send each test request as compact JSON plus newline by convention.
 7. Collect JSON packets until the matching `RSP.msg` is observed or the serial timeout expires.
 8. Compare the actual response against the expected fields in the case file.
 9. If a case is marked `program_after:true`, close the serial port, re-run the established ST-Link programming workflow, rediscover the USB CDC/VCP port, and continue testing against the reset target.
@@ -83,7 +83,7 @@ Case-file maintenance:
   - numeric value: `{ "number": true }`
   - numeric or `null`: `{ "nullable_number": true }`
   - constrained values: `{ "one_of": ["RESET", "NORMAL"] }`
-- Use `request_raw` and `send_newline:false` for framing tests that are not normal JSONL requests.
+- Use `request_raw` and `send_newline:false` for framing tests that are not normal JSON requests.
 - Use `expected_responses` when one input stream should produce more than one expected packet.
 - Use `expect_no_response:true` with a short `timeout_seconds` for partial-object or oversized-object tests.
 - Use `cleanup_raw` only to recover the target command processor after a deliberate partial-object test has already been scored.
@@ -100,4 +100,4 @@ Known runner constraints:
 - The runner extracts JSON objects from the observed serial stream using brace-depth and string-state tracking, so it can handle back-to-back objects and non-JSON noise around objects.
 - Periodic `STS` is disabled as a setup step to reduce asynchronous traffic during request/response tests.
 - The runner validates fields explicitly listed under `expected`; extra fields such as `hc` are allowed unless a case constrains them.
-- Some comprehensive cases intentionally exercise power-manager commands and settable digital signals from `Docs/JSON_Tests.md`; cleanup cases reset managers and disable periodic traffic afterward.
+- Some comprehensive cases intentionally exercise power-manager commands and settable digital signals from `Docs/JSON_Tests.md`; cleanup cases reset managers, disable periodic `DBG`, and re-enable periodic `STS` at the normal 1000 ms interval afterward.

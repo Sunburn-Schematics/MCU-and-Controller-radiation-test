@@ -507,16 +507,6 @@ static bool hc_debug_telemetry_get_lt8316_pwr_en(hc_debug_value_t *value_out)
     return hc_debug_telemetry_get_status_bool(s_active_status->Lt8316.PowerEnabled, value_out);
 }
 
-static bool hc_debug_telemetry_get_hc_state(hc_debug_value_t *value_out)
-{
-    if (s_active_status == NULL)
-    {
-        return false;
-    }
-
-    return hc_debug_telemetry_get_status_string(hc_app_state_to_string(s_active_status->State), value_out);
-}
-
 static bool hc_debug_telemetry_get_ltc3901_state(hc_debug_value_t *value_out)
 {
     if (s_active_status == NULL)
@@ -621,7 +611,6 @@ static const hc_debug_signal_def_t s_signal_catalog[] = {
     { "led.red",               hc_debug_telemetry_get_led_red },
     { "led.green",             hc_debug_telemetry_get_led_green },
     { "sync.enable",           hc_debug_telemetry_get_sync_enable },
-    { "hc.state",              hc_debug_telemetry_get_hc_state },
     { "ltc3901.state",         hc_debug_telemetry_get_ltc3901_state },
     { "lt8316.state",          hc_debug_telemetry_get_lt8316_state },
 };

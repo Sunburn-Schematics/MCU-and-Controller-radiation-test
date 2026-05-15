@@ -18,7 +18,6 @@ typedef struct
     bool Collecting;
     bool InString;
     bool EscapeActive;
-    bool Discarding;
     uint32_t BraceDepth;
 } CommandProcessorContext_t;
 
@@ -31,7 +30,6 @@ static void command_processor_reset_state(void)
     s_CommandProcessor.Collecting = false;
     s_CommandProcessor.InString = false;
     s_CommandProcessor.EscapeActive = false;
-    s_CommandProcessor.Discarding = false;
     s_CommandProcessor.BraceDepth = 0u;
 }
 
@@ -43,15 +41,12 @@ static void command_processor_begin_object(char ch)
     s_CommandProcessor.Collecting = true;
     s_CommandProcessor.InString = false;
     s_CommandProcessor.EscapeActive = false;
-    s_CommandProcessor.Discarding = false;
     s_CommandProcessor.BraceDepth = 1u;
 }
 
-static void command_processor_enter_discard_mode(void)
+static void command_processor_abort_object(void)
 {
-    s_CommandProcessor.Length = 0u;
-    s_CommandProcessor.Buffer[0] = '\0';
-    s_CommandProcessor.Discarding = true;
+    command_processor_reset_state();
 }
 
 static void command_processor_handle_byte(char ch)
@@ -66,19 +61,15 @@ static void command_processor_handle_byte(char ch)
         return;
     }
 
-    if (!s_CommandProcessor.Discarding)
+    if (s_CommandProcessor.Length >= (COMMAND_PROCESSOR_MESSAGE_BUFFER_SIZE - 1u))
     {
-        if (s_CommandProcessor.Length >= (COMMAND_PROCESSOR_MESSAGE_BUFFER_SIZE - 1u))
-        {
-            command_processor_enter_discard_mode();
-        }
-        else
-        {
-            s_CommandProcessor.Buffer[s_CommandProcessor.Length] = ch;
-            s_CommandProcessor.Length++;
-            s_CommandProcessor.Buffer[s_CommandProcessor.Length] = '\0';
-        }
+        command_processor_abort_object();
+        return;
     }
+
+    s_CommandProcessor.Buffer[s_CommandProcessor.Length] = ch;
+    s_CommandProcessor.Length++;
+    s_CommandProcessor.Buffer[s_CommandProcessor.Length] = '\0';
 
     if (s_CommandProcessor.InString)
     {
@@ -123,7 +114,7 @@ static void command_processor_handle_byte(char ch)
 
         if (s_CommandProcessor.BraceDepth == 0u)
         {
-            if (!s_CommandProcessor.Discarding && (s_CommandProcessor.Length > 0u))
+            if (s_CommandProcessor.Length > 0u)
             {
                 hc_jsonl_cmd_process_line(s_CommandProcessor.Buffer);
             }
