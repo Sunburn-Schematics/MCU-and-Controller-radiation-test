@@ -534,6 +534,12 @@ function Find-ExpectedPacket {
             continue
         }
 
+        $candidateFailures = [System.Collections.ArrayList]::new()
+        Test-ExpectedValue -Path "candidate" -Expected $Expected -Actual $packet -Failures $candidateFailures
+        if ($candidateFailures.Count -gt 0) {
+            continue
+        }
+
         return [pscustomobject]@{
             Index = $i
             Entry = $Packets[$i]

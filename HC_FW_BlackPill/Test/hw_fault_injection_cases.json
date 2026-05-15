@@ -1,0 +1,945 @@
+{
+  "suite": "HC manager fault-injection hardware tests",
+  "source": "App/ltc3901_manager.c and App/lt8316_manager.c",
+  "tests": [
+    {
+      "id": "fault_setup_disable_periodic_dbg",
+      "title": "Disable periodic DBG during fault-injection tests",
+      "kind": "setup",
+      "request": {
+        "type": "SET",
+        "msg": 8000,
+        "args": {
+          "dbg_period_ms": 0,
+          "dbg_signals": []
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8000,
+        "args": {
+          "dbg_period_ms": 0,
+          "dbg_signals": []
+        }
+      }
+    },
+    {
+      "id": "fault_setup_enable_fast_sts",
+      "title": "Enable fast STS observation during manager fault-injection tests",
+      "kind": "setup",
+      "request": {
+        "type": "SET",
+        "msg": 8001,
+        "args": {
+          "sts_period_ms": 250
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8001,
+        "args": {
+          "sts_period_ms": 250
+        }
+      }
+    },
+    {
+      "id": "fault_setup_reset_managers",
+      "title": "Reset both DUT managers before fault-injection tests",
+      "kind": "setup",
+      "request": {
+        "type": "SET",
+        "msg": 8002,
+        "args": {
+          "ltc3901_cmd": "RESET",
+          "lt8316_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8002,
+        "args": {
+          "ltc3901_cmd": "RESET",
+          "lt8316_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_setup_restore_ltc3901_defaults",
+      "title": "Restore LTC3901 manager thresholds before fault-injection tests",
+      "kind": "setup",
+      "request": {
+        "type": "SET",
+        "msg": 8003,
+        "args": {
+          "ltc3901.isupply_ma_max": 50,
+          "ltc3901.vupstream_mv_min": 10000,
+          "ltc3901.ltc3901_vcc_mv_min": 10000,
+          "ltc3901.power_up_timeout_ms": 2000,
+          "ltc3901.power_retry_delay_ms": 1000,
+          "ltc3901.power_fault_max": 0,
+          "ltc3901.sync_on_delay_ms": 3000,
+          "ltc3901.sync_hold_on_time_ms": 55000,
+          "ltc3901.sync_hold_off_time_ms": 5000,
+          "ltc3901.sync_stabilization_time_ms": 100,
+          "ltc3901.sync_fault_delay_ms": 1000
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8003,
+        "args": {
+          "ltc3901.isupply_ma_max": 50,
+          "ltc3901.vupstream_mv_min": 10000,
+          "ltc3901.ltc3901_vcc_mv_min": 10000,
+          "ltc3901.power_up_timeout_ms": 2000,
+          "ltc3901.power_retry_delay_ms": 1000,
+          "ltc3901.power_fault_max": 0,
+          "ltc3901.sync_on_delay_ms": 3000,
+          "ltc3901.sync_hold_on_time_ms": 55000,
+          "ltc3901.sync_hold_off_time_ms": 5000,
+          "ltc3901.sync_stabilization_time_ms": 100,
+          "ltc3901.sync_fault_delay_ms": 1000
+        }
+      }
+    },
+    {
+      "id": "fault_observe_reset_states",
+      "title": "Observe both managers in RESET state",
+      "request": {
+        "type": "GET",
+        "msg": 8010,
+        "args": [
+          "sw_version"
+        ]
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8010
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "RESET"
+            },
+            "LT8316": {
+              "state": "RESET"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_observe_halt",
+      "title": "Drive LTC3901 manager into HALT state",
+      "request": {
+        "type": "SET",
+        "msg": 8011,
+        "args": {
+          "ltc3901_cmd": "HALT"
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8011,
+          "args": {
+            "ltc3901_cmd": "HALT"
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "HALT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_halt",
+      "title": "Reset LTC3901 manager after HALT observation",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8012,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8012,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_observe_power_up",
+      "title": "Drive LTC3901 manager into POWER_UP state using intentionally unreachable voltage thresholds",
+      "request": {
+        "type": "SET",
+        "msg": 8020,
+        "args": {
+          "ltc3901.vupstream_mv_min": 500000,
+          "ltc3901.ltc3901_vcc_mv_min": 500000,
+          "ltc3901.power_up_timeout_ms": 1000,
+          "ltc3901.power_retry_delay_ms": 10000,
+          "ltc3901.power_fault_max": 1,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8020
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Entering POWER_UP"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWER_UP"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_power_up",
+      "title": "Reset LTC3901 manager after POWER_UP observation",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8021,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8021,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_power_up_timeout",
+      "title": "Force LTC3901 POWER_FAULT through power-up timeout",
+      "request": {
+        "type": "SET",
+        "msg": 8022,
+        "args": {
+          "ltc3901.vupstream_mv_min": 500000,
+          "ltc3901.ltc3901_vcc_mv_min": 500000,
+          "ltc3901.power_up_timeout_ms": 100,
+          "ltc3901.power_retry_delay_ms": 10000,
+          "ltc3901.power_fault_max": 1,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 3,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8022
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Power Up Timeout"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWER_FAULT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_power_fault_timeout",
+      "title": "Reset LTC3901 manager after power-up timeout fault",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8023,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8023,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_observe_powered",
+      "title": "Drive LTC3901 manager into POWERED state using permissive thresholds",
+      "request": {
+        "type": "SET",
+        "msg": 8030,
+        "args": {
+          "ltc3901.isupply_ma_max": 100000,
+          "ltc3901.vupstream_mv_min": -1,
+          "ltc3901.ltc3901_vcc_mv_min": -1,
+          "ltc3901.power_up_timeout_ms": 1000,
+          "ltc3901.sync_on_delay_ms": 10000,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8030
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Powered"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWERED"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_vupstream_low_from_powered",
+      "title": "Force LTC3901 POWER_FAULT from POWERED by raising the VUpstream minimum",
+      "request": {
+        "type": "SET",
+        "msg": 8031,
+        "args": {
+          "ltc3901.vupstream_mv_min": 500000,
+          "ltc3901.ltc3901_vcc_mv_min": -1
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8031
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: VUpstream Too Low"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWER_FAULT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_vupstream_low",
+      "title": "Reset LTC3901 manager after VUpstream low fault",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8032,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8032,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_powered_before_vcc_low",
+      "title": "Drive LTC3901 manager back into POWERED before VCC fault injection",
+      "kind": "setup",
+      "request": {
+        "type": "SET",
+        "msg": 8033,
+        "args": {
+          "ltc3901.isupply_ma_max": 100000,
+          "ltc3901.vupstream_mv_min": -1,
+          "ltc3901.ltc3901_vcc_mv_min": -1,
+          "ltc3901.power_up_timeout_ms": 1000,
+          "ltc3901.sync_on_delay_ms": 10000,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8033
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Powered"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_vcc_low_from_powered",
+      "title": "Force LTC3901 POWER_FAULT from POWERED by raising the LTC3901 VCC minimum",
+      "request": {
+        "type": "SET",
+        "msg": 8034,
+        "args": {
+          "ltc3901.vupstream_mv_min": -1,
+          "ltc3901.ltc3901_vcc_mv_min": 500000
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8034
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: LTC3901 VCC Too Low"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWER_FAULT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_vcc_low",
+      "title": "Reset LTC3901 manager after VCC low fault",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8035,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8035,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_isupply_too_high",
+      "title": "Attempt to force LTC3901 POWER_FAULT by lowering the current threshold",
+      "request": {
+        "type": "SET",
+        "msg": 8040,
+        "args": {
+          "ltc3901.isupply_ma_max": -1,
+          "ltc3901.vupstream_mv_min": -1,
+          "ltc3901.ltc3901_vcc_mv_min": -1,
+          "ltc3901.power_up_timeout_ms": 1000,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8040
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Isupply Current too high"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWER_FAULT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_current_fault",
+      "title": "Reset LTC3901 manager after current fault",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8041,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8041,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_sync_cycle_on_off",
+      "title": "Drive LTC3901 through POWERED_SYNC_ON and POWERED_SYNC_OFF using short sync timing",
+      "request": {
+        "type": "SET",
+        "msg": 8050,
+        "args": {
+          "ltc3901.isupply_ma_max": 100000,
+          "ltc3901.vupstream_mv_min": -1,
+          "ltc3901.ltc3901_vcc_mv_min": -1,
+          "ltc3901.power_up_timeout_ms": 1000,
+          "ltc3901.sync_on_delay_ms": 100,
+          "ltc3901.sync_hold_on_time_ms": 200,
+          "ltc3901.sync_hold_off_time_ms": 200,
+          "ltc3901.sync_stabilization_time_ms": 5000,
+          "ltc3901.sync_fault_delay_ms": 500,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 3,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8050
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Cycle Sync ON"
+            }
+          }
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Cycle Sync OFF"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWERED_SYNC_OFF"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_sync_cycle",
+      "title": "Reset LTC3901 manager after sync cycle observation",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8051,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8051,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_ltc3901_sync_fault",
+      "title": "Attempt to force LTC3901 POWERED_SYNC_FAULT using zero sync stabilization timing",
+      "request": {
+        "type": "SET",
+        "msg": 8052,
+        "args": {
+          "ltc3901.isupply_ma_max": 100000,
+          "ltc3901.vupstream_mv_min": -1,
+          "ltc3901.ltc3901_vcc_mv_min": -1,
+          "ltc3901.power_up_timeout_ms": 1000,
+          "ltc3901.sync_on_delay_ms": 50,
+          "ltc3901.sync_hold_on_time_ms": 100,
+          "ltc3901.sync_hold_off_time_ms": 100,
+          "ltc3901.sync_stabilization_time_ms": 0,
+          "ltc3901.sync_fault_delay_ms": 300,
+          "ltc3901_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 3,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8052
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: (ME|MF) Stopped"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": "POWERED_SYNC_FAULT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_ltc3901_reset_after_sync_fault",
+      "title": "Reset LTC3901 manager after sync fault attempt",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8053,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8053,
+        "args": {
+          "ltc3901_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_lt8316_observe_powered",
+      "title": "Drive LT8316 manager into POWERED state",
+      "request": {
+        "type": "SET",
+        "msg": 8060,
+        "args": {
+          "lt8316.power_retry_delay_ms": 10000,
+          "lt8316.power_fault_max": 1,
+          "lt8316.power_on_stabilization_time_ms": 10000,
+          "lt8316_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 2,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8060
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LT8316: Entering POWERED"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LT8316": {
+              "state": "POWERED"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_lt8316_reset_after_powered",
+      "title": "Reset LT8316 manager after POWERED observation",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8061,
+        "args": {
+          "lt8316_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8061,
+        "args": {
+          "lt8316_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_lt8316_gate_stopped_attempt",
+      "title": "Attempt to force LT8316 FAULT by reducing gate stabilization time",
+      "request": {
+        "type": "SET",
+        "msg": 8062,
+        "args": {
+          "lt8316.power_retry_delay_ms": 10000,
+          "lt8316.power_fault_max": 1,
+          "lt8316.power_on_stabilization_time_ms": 0,
+          "lt8316_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 3,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8062
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LT8316: GATE Stopped"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LT8316": {
+              "state": "FAULT"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_cleanup_reset_managers",
+      "title": "Reset both DUT managers after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8090,
+        "args": {
+          "ltc3901_cmd": "RESET",
+          "lt8316_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8090,
+        "args": {
+          "ltc3901_cmd": "RESET",
+          "lt8316_cmd": "RESET"
+        }
+      }
+    },
+    {
+      "id": "fault_cleanup_restore_ltc3901_defaults",
+      "title": "Restore LTC3901 manager defaults after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8091,
+        "args": {
+          "ltc3901.isupply_ma_max": 50,
+          "ltc3901.vupstream_mv_min": 10000,
+          "ltc3901.ltc3901_vcc_mv_min": 10000,
+          "ltc3901.power_up_timeout_ms": 2000,
+          "ltc3901.power_retry_delay_ms": 1000,
+          "ltc3901.power_fault_max": 0,
+          "ltc3901.sync_on_delay_ms": 3000,
+          "ltc3901.sync_hold_on_time_ms": 55000,
+          "ltc3901.sync_hold_off_time_ms": 5000,
+          "ltc3901.sync_stabilization_time_ms": 100,
+          "ltc3901.sync_fault_delay_ms": 1000
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8091
+      }
+    },
+    {
+      "id": "fault_cleanup_restore_lt8316_defaults",
+      "title": "Restore LT8316 manager defaults after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8092,
+        "args": {
+          "lt8316.power_retry_delay_ms": 1000,
+          "lt8316.power_fault_max": 0,
+          "lt8316.power_on_stabilization_time_ms": 1000
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8092
+      }
+    },
+    {
+      "id": "fault_cleanup_run_managers",
+      "title": "Confirm both DUT managers can be commanded back into RUN after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8093,
+        "args": {
+          "ltc3901_cmd": "RUN",
+          "lt8316_cmd": "RUN"
+        }
+      },
+      "timeout_seconds": 8,
+      "expected_responses": [
+        {
+          "type": "RSP",
+          "msg": 8093,
+          "args": {
+            "ltc3901_cmd": "RUN",
+            "lt8316_cmd": "RUN"
+          }
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LTC3901: Powered"
+            }
+          }
+        },
+        {
+          "type": "EVT",
+          "args": {
+            "msg": {
+              "matches": "^LT8316: Entering POWERED"
+            }
+          }
+        },
+        {
+          "type": "STS",
+          "duts": {
+            "LTC3901": {
+              "state": {
+                "one_of": [
+                  "POWERED",
+                  "POWERED_SYNC_ON",
+                  "POWERED_SYNC_OFF"
+                ]
+              },
+              "pwr_en": true
+            },
+            "LT8316": {
+              "state": "POWERED",
+              "pwr_en": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fault_cleanup_disable_periodic_dbg",
+      "title": "Disable periodic DBG after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8094,
+        "args": {
+          "dbg_period_ms": 0,
+          "dbg_signals": []
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8094,
+        "args": {
+          "dbg_period_ms": 0,
+          "dbg_signals": []
+        }
+      }
+    },
+    {
+      "id": "fault_cleanup_enable_periodic_sts",
+      "title": "Re-enable normal periodic STS after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8095,
+        "args": {
+          "sts_period_ms": 1000
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8095,
+        "args": {
+          "sts_period_ms": 1000
+        }
+      }
+    },
+    {
+      "id": "fault_cleanup_hc_system_reset",
+      "title": "Reset the whole Host Controller after fault-injection tests",
+      "kind": "cleanup",
+      "request": {
+        "type": "SET",
+        "msg": 8096,
+        "args": {
+          "hc_cmd": "RESET"
+        }
+      },
+      "expected": {
+        "type": "RSP",
+        "msg": 8096,
+        "args": {
+          "hc_cmd": "RESET"
+        }
+      },
+      "timeout_seconds": 2,
+      "reset_after": true
+    }
+  ]
+}

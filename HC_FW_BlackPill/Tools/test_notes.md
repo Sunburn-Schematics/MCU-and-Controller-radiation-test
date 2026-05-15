@@ -26,6 +26,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Tools\test.ps1 -PortName COM
 powershell -NoProfile -ExecutionPolicy Bypass -File Tools\test.ps1 -CasePath Test\hw_test_cases.json -ContinueOnFail
 powershell -NoProfile -ExecutionPolicy Bypass -File Tools\test.ps1 -ReportRoot Test\Reports
 powershell -NoProfile -ExecutionPolicy Bypass -File Tools\test.ps1 -SkipReportArchive
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools\test.ps1 -CasePath Test\hw_fault_injection_cases.json -ContinueOnFail
 ```
 
 The `-Build` option invokes the guarded command-list build:
@@ -68,6 +69,15 @@ Current coverage:
 - observable `STS` and `EVT` examples from `Docs/JSON_Tests.md`
 - valid command examples, invalid-command examples, malformed/partial JSON examples, oversized-object behavior, and back-to-back object framing
 
+Additional opt-in coverage:
+- `Test/hw_fault_injection_cases.json` is a separate intrusive manager-state suite.
+- It uses only remote JSON `SET` commands against runtime manager thresholds and timers such as `ltc3901.vupstream_mv_min`, `ltc3901.ltc3901_vcc_mv_min`, `ltc3901.isupply_ma_max`, and sync timing fields.
+- It does not modify firmware or ADC calibration.
+- It enables periodic `STS` at 250 ms during the suite to observe manager transitions without overloading command/response traffic.
+- Its cleanup tail resets the managers, restores runtime threshold defaults, confirms both managers can be commanded back to `RUN`, disables periodic `DBG`, re-enables normal 1000 ms `STS`, and finally sends `{"type":"SET","args":{"hc_cmd":"RESET"}}` to reinitialize internal runtime state.
+- Current-fault coverage depends on the target reporting a valid `isupply` value. If `isupply` is `null` under the connected hardware conditions, that case should fail and the report should be used as the triage record.
+- LT8316 fault coverage is limited by the implementation: its only current fault trigger is invalid gate capture after stabilization, so the suite can shorten the stabilization time but cannot force the gate signal invalid without another hardware stimulus.
+
 Case-file maintenance:
 - Add new cases to `Test/hw_test_cases.json`.
 - Keep `source_section` pointing back to the relevant requirement, protocol note, or `Docs/JSON_Tests.md` example.
@@ -98,6 +108,7 @@ Bug handling policy:
 
 Known runner constraints:
 - The runner extracts JSON objects from the observed serial stream using brace-depth and string-state tracking, so it can handle back-to-back objects and non-JSON noise around objects.
+- For `expected_responses`, the runner matches packets by type/message filters and expected field content before consuming a packet. This matters when one request produces several `EVT` or `STS` packets of the same type.
 - Periodic `STS` is disabled as a setup step to reduce asynchronous traffic during request/response tests.
 - The runner validates fields explicitly listed under `expected`; extra fields such as `hc` are allowed unless a case constrains them.
 - Some comprehensive cases intentionally exercise power-manager commands and settable digital signals from `Docs/JSON_Tests.md`; cleanup cases reset managers, disable periodic `DBG`, and re-enable periodic `STS` at the normal 1000 ms interval afterward.
