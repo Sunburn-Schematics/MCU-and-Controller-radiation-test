@@ -78,6 +78,20 @@ The script uses ST-Link/SWD through OpenOCD to program and verify `build/Debug/H
 
 See `Tools/program_notes.md` for the detailed programming and target-verification procedure.
 
+## Hardware test notes
+
+Run the hardware-in-the-loop JSON protocol smoke tests with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools/test.ps1 -Build -Program -ContinueOnFail
+```
+
+The test runner can invoke the guarded build and ST-Link programming workflows, then discovers the USB CDC/VCP port and executes data-driven JSON cases from `Test/hw_test_cases.json`. It writes run-local artifacts under `build/<preset>/hw_tests/<timestamp>/` and durable review artifacts under `Test/Reports/`.
+
+The initial proof-of-concept covers `SET date_time` and `GET date_time` from `Docs/JSON_Tests.md`. Test failures are logged for human triage; the runner does not attempt to fix firmware behavior.
+
+See `Tools/test_notes.md` for the test workflow, case-file format, and bug-handling policy.
+
 ## Repository inclusion notes
 
 Before first commit into the target repository, verify:

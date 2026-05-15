@@ -20,6 +20,8 @@ Complete build-to-hardware loop:
    - `program/verify: OK`
    - `runtime sw_version: ...`
 6. For behavior that cannot be fully verified over USB, ask the user for hardware observation.
+7. Run the hardware test workflow when protocol/runtime behavior must be checked:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\test.ps1 -Build -Program -ContinueOnFail`
 
 Proven end-to-end hardware test:
 - Source change: `App/fw_app.c` changed `HEARTBEAT_PERIOD_MS` from `500U` to `250U`.
@@ -69,6 +71,14 @@ Primary build flow:
 7. The script executes each generated command serially through `cmd.exe`, using a per-command timeout and writing timestamped stdout/stderr logs under `build/<Preset>/`.
 8. After the command-list build, the script restores the backed-up Ninja scheduler state and removes any stale `.ninja_lock`.
 9. If a command times out, the script stops build-tool child processes started after that command began and exits with code `124`.
+10. The generated command-list state backups are stored under `build/<Preset>/.cb_*`. These folders are excluded from later depfile discovery because they are wrapper state, not part of the active CMake/Ninja build graph.
+11. The wrapper removes transient `.cb_*`, stale `.codex_ninja_state_backup_*`, and old `.ninja_* .backup_*` files during normal cleanup.
+12. The wrapper keeps only the most recent `cube_cmake_build_*.log` and `cube_cmake_dry_run_*.log` runs, controlled by `-KeepDiagnosticLogCount` which defaults to `5`. Use `-NoDiagnosticCleanup` only when preserving diagnostics for investigation.
+
+Build-directory artifact policy:
+- Required CMake/Ninja state: `CMakeCache.txt`, `build.ninja`, `compile_commands.json`, `.ninja_deps`, `.ninja_log`, `.cmake/`, `.cache/`, `CMakeFiles/`, and generated object/dependency files.
+- Required firmware outputs: `HC_FW_BlackPill.elf` and `HC_FW_BlackPill.map`.
+- Disposable wrapper diagnostics: `.cb_*`, `.codex_ninja_state_backup_*`, `.ninja_deps.backup_*`, `.ninja_log.backup_*`, old `cube_cmake_build_*.log`, old `cube_cmake_dry_run_*.log`, and ad hoc `ninja_*` or `direct_compile_*` probe logs.
 
 Synchronization checks:
 - `.vscode/settings.json` should keep `cmake.cmakePath` set to `cube-cmake`.
@@ -90,6 +100,7 @@ Progress:
 - Added a command-list backend that reads the generated Ninja commands and executes them one at a time with per-command timeouts.
 - Fixed the VS Code settings comparison to normalize `/` and `\` path separators before warning about drift.
 - Added preservation of existing `.ninja_deps`, `.ninja_log`, and `*.obj.d` files around command-list builds so the fallback does not further desynchronize the manual VS Code/Ninja state.
+- Excluded wrapper-generated `.cb_*` backup folders from depfile discovery so interrupted or repeated automation runs do not recursively back up old backups.
 - Verified the guarded command-list build after a user-performed CMake cache delete and reconfigure.
 - Completed a guarded Debug build with:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\build.ps1 -Preset Debug -Backend Commands -PerCommandTimeoutSeconds 30`

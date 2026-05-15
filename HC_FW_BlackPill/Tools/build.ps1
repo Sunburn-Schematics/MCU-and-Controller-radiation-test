@@ -26,7 +26,11 @@ param(
     [ValidateSet('Commands', 'Ninja', 'CubeCMake')]
     [string]$Backend = 'Commands',
 
-    [int]$PerCommandTimeoutSeconds = 30
+    [int]$PerCommandTimeoutSeconds = 30,
+
+    [int]$KeepDiagnosticLogCount = 5,
+
+    [switch]$NoDiagnosticCleanup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -111,6 +115,82 @@ function Start-LoggedProcess {
         StderrTask = $stderrTask
         StdoutPath = $StdoutPath
         StderrPath = $StderrPath
+    }
+}
+
+# Remove wrapper diagnostics that are useful while investigating a build but do
+# not form part of the CMake/Ninja build graph. The current run's log paths are
+# excluded so callers can still inspect the result that was just printed.
+function Remove-BuildDiagnosticArtifacts {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BuildDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [int]$KeepLogCount,
+
+        [string[]]$ExcludePaths = @()
+    )
+
+    $buildFullPath = [System.IO.Path]::GetFullPath($BuildDirectory)
+    $excluded = @($ExcludePaths | ForEach-Object { [System.IO.Path]::GetFullPath($_) })
+
+    $transientDirectories = @(
+        Get-ChildItem -LiteralPath $BuildDirectory -Force -Directory -Filter '.cb_*' -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath $BuildDirectory -Force -Directory -Filter '.codex_ninja_state_backup_*' -ErrorAction SilentlyContinue
+    )
+
+    foreach ($directory in $transientDirectories) {
+        $fullName = [System.IO.Path]::GetFullPath($directory.FullName)
+        if (-not $fullName.StartsWith($buildFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove diagnostic directory outside build directory: $fullName"
+        }
+        Remove-Item -LiteralPath $fullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $backupFiles = @(
+        Get-ChildItem -LiteralPath $BuildDirectory -Force -File -Filter '.ninja_deps.backup_*' -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath $BuildDirectory -Force -File -Filter '.ninja_log.backup_*' -ErrorAction SilentlyContinue
+    )
+
+    foreach ($file in $backupFiles) {
+        $fullName = [System.IO.Path]::GetFullPath($file.FullName)
+        if ($excluded -contains $fullName) {
+            continue
+        }
+        if (-not $fullName.StartsWith($buildFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove diagnostic file outside build directory: $fullName"
+        }
+        Remove-Item -LiteralPath $fullName -Force -ErrorAction SilentlyContinue
+    }
+
+    foreach ($modeName in @('build', 'dry_run')) {
+        $logBases = Get-ChildItem -LiteralPath $BuildDirectory -Force -File -Filter "cube_cmake_${modeName}_*.log" -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Name -replace '\.(out|err)\.log$', '' } |
+            Sort-Object -Unique |
+            ForEach-Object {
+                $matchingFiles = @(Get-ChildItem -LiteralPath $BuildDirectory -Force -File -Filter "$_.*.log" -ErrorAction SilentlyContinue)
+                [pscustomobject]@{
+                    BaseName = $_
+                    LastWriteTime = ($matchingFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+                    Files = $matchingFiles
+                }
+            } |
+            Sort-Object LastWriteTime -Descending
+
+        $removeBases = @($logBases | Select-Object -Skip $KeepLogCount)
+        foreach ($base in $removeBases) {
+            foreach ($file in $base.Files) {
+                $fullName = [System.IO.Path]::GetFullPath($file.FullName)
+                if ($excluded -contains $fullName) {
+                    continue
+                }
+                if (-not $fullName.StartsWith($buildFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Refusing to remove diagnostic log outside build directory: $fullName"
+                }
+                Remove-Item -LiteralPath $fullName -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 
@@ -301,9 +381,18 @@ function Invoke-CommandListBuild {
     New-Item -ItemType Directory -Force -Path $stateBackupRoot | Out-Null
     $ninjaDepsBackup = Backup-FileIfPresent -Path (Join-Path $BuildDirectory '.ninja_deps') -BackupRoot $stateBackupRoot
     $ninjaLogBackup = Backup-FileIfPresent -Path (Join-Path $BuildDirectory '.ninja_log') -BackupRoot $stateBackupRoot
+
+    # The command-by-command backend temporarily hides Ninja's global state and
+    # depfiles so each compiler command can be timed and killed independently.
+    # Those backups live under .cb_*; exclude them from discovery or a later run
+    # will recursively back up earlier backups and spend minutes walking state
+    # that is unrelated to the active CMake/Ninja build graph.
     $depfileBackups = @(
         Get-ChildItem -Path $BuildDirectory -Recurse -File -Filter '*.obj.d' -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -notlike (Join-Path $BuildDirectory '.codex_ninja_state_backup_*') + '*' } |
+            Where-Object {
+                ($_.FullName -notlike (Join-Path $BuildDirectory '.codex_ninja_state_backup_*') + '*') -and
+                ($_.FullName -notlike (Join-Path $BuildDirectory '.cb_*') + '*')
+            } |
             ForEach-Object {
                 $relative = Get-RelativePathCompat -BasePath $BuildDirectory -ChildPath $_.FullName
                 $backupPath = Join-Path $stateBackupRoot $relative
@@ -483,6 +572,12 @@ if ($Backend -eq 'Commands' -and -not $DryRun) {
     Get-Content -Path $stdoutLog -Tail 80 -ErrorAction SilentlyContinue
     Write-Output '--- stderr tail ---'
     Get-Content -Path $stderrLog -Tail 80 -ErrorAction SilentlyContinue
+    if (-not $NoDiagnosticCleanup) {
+        Remove-BuildDiagnosticArtifacts `
+            -BuildDirectory $buildDir `
+            -KeepLogCount $KeepDiagnosticLogCount `
+            -ExcludePaths @($stdoutLog, $stderrLog)
+    }
     exit $exitCode
 }
 
@@ -497,6 +592,12 @@ if (-not $completed) {
     Stop-BuildProcessesStartedAfter -StartTime $startTime
     Complete-LoggedProcess -Handle $handle
     Write-Output "timeout: build process exceeded ${TimeoutSeconds}s and was stopped"
+    if (-not $NoDiagnosticCleanup) {
+        Remove-BuildDiagnosticArtifacts `
+            -BuildDirectory $buildDir `
+            -KeepLogCount $KeepDiagnosticLogCount `
+            -ExcludePaths @($stdoutLog, $stderrLog)
+    }
     exit 124
 }
 
@@ -511,5 +612,11 @@ Get-Content -Path $stdoutLog -Tail 80 -ErrorAction SilentlyContinue
 
 Write-Output '--- stderr tail ---'
 Get-Content -Path $stderrLog -Tail 80 -ErrorAction SilentlyContinue
+if (-not $NoDiagnosticCleanup) {
+    Remove-BuildDiagnosticArtifacts `
+        -BuildDirectory $buildDir `
+        -KeepLogCount $KeepDiagnosticLogCount `
+        -ExcludePaths @($stdoutLog, $stderrLog)
+}
 
 exit $exitCode
